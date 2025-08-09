@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Raindrop Sync Options</title>
+  <script src="../libs/tailwindcss@4.js"></script>
+</head>
+
+<body class="min-h-screen bg-gray-50 text-gray-900">
+  <main class="max-w-3xl mx-auto p-6">
+    <h1 class="text-xl font-semibold mb-4">Raindrop Sync Options</h1>
+
+    <div class="space-y-2 mb-6">
+      <label for="token" class="block font-medium">Raindrop API Token</label>
+      <input id="token" type="text" placeholder="Enter your Raindrop API token"
+        class="w-full max-w-2xl rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+      <p class="text-sm text-gray-600">Token is stored locally in your browser and used to call api.raindrop.io.</p>
+    </div>
+
+    <div class="flex items-center">
+      <button id="save"
+        class="inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 hover:bg-blue-700 disabled:opacity-60">Save</button>
+      <span id="status" class="ml-3 text-sm"></span>
+    </div>
+  </main>
+  <script src="options.js"></script>
+</body>
+
+</html>

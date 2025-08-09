@@ -1,0 +1,18 @@
+{
+  "name": "raindrop-sync",
+  "version": "1.0.0",
+  "description": "Sync your browser’s bookmarks with Raindrop",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/chrome": "^0.1.1"
+  }
+}

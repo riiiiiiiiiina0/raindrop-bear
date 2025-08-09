@@ -1,0 +1,68 @@
+name: Version Management
+
+on:
+  push:
+    branches: [ main ]
+
+# Add permissions to allow pushing commits and tags
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump-version-and-tag:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[no-cli]')"
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    
+    - name: Configure Git
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+    
+    - name: Bump version, commit, and tag
+      run: |
+        # Read current version from manifest.json
+        current_version=$(node -p "require('./manifest.json').version")
+        echo "Current version: $current_version"
+        
+        # Parse version components (handle both major.minor and major.minor.patch)
+        IFS='.' read -r major minor patch <<< "$current_version"
+        
+        # Always bump minor version and keep patch if it exists
+        new_minor=$((minor + 1))
+        if [ -n "$patch" ]; then
+          new_version="$major.$new_minor.$patch"
+        else
+          new_version="$major.$new_minor"
+        fi
+        
+        echo "New version: $new_version"
+        
+        # Update manifest.json
+        node -e "
+          const fs = require('fs');
+          const manifest = JSON.parse(fs.readFileSync('./manifest.json', 'utf8'));
+          manifest.version = '$new_version';
+          fs.writeFileSync('./manifest.json', JSON.stringify(manifest, null, 2) + '\n');
+        "
+        
+        # Commit the changes
+        git add manifest.json
+        git commit -m "New version v$new_version [no-cli]"
+        git push origin main
+
+        # Create and push tag
+        git tag "v$new_version"
+        git push origin "v$new_version"
