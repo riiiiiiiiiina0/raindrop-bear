@@ -2,11 +2,17 @@
 // Periodically sync Raindrop.io collections and bookmarks into Chrome bookmarks
 
 // ===== Configuration =====
-const RAINDROP_API_BASE = 'https://api.raindrop.io/rest/v1';
+import {
+  apiGET as raindropGET,
+  setApiToken as setRaindropToken,
+  loadTokenIfNeeded,
+} from './modules/raindrop.js';
 // API token is loaded from storage (set via Options page)
 let RAINDROP_API_TOKEN = '';
-const TOKEN_NOTIFICATION_ID = 'raindrop-token-required';
-let lastTokenNotificationMs = 0;
+import {
+  notifyMissingOrInvalidToken,
+  TOKEN_NOTIFICATION_ID,
+} from './modules/notifications.js';
 
 const ALARM_NAME = 'raindrop-sync';
 const SYNC_PERIOD_MINUTES = 10;
@@ -19,172 +25,19 @@ const STORAGE_KEYS = {
   rootFolderId: 'rootFolderId', // chrome folder id for the Raindrop root
 };
 
-const ROOT_FOLDER_NAME = 'Raindrop Bookmarks';
-const UNSORTED_COLLECTION_ID = -1; // Raindrop special collection id
+import {
+  ROOT_FOLDER_NAME,
+  UNSORTED_COLLECTION_ID,
+  getOrCreateRootFolder as bmGetOrCreateRootFolder,
+  getOrCreateChildFolder as bmGetOrCreateChildFolder,
+  getBookmarksBarFolderId,
+  removeLegacyTopFolders,
+} from './modules/bookmarks.js';
 
 // Concurrency guard (service worker scope)
 let isSyncing = false;
 
-// ===== Utility: Promisified Chrome APIs =====
-/**
- * Promisified Chrome extension APIs for storage and bookmarks.
- */
-const chromeP = {
-  /**
-   * Get values from chrome.storage.local.
-   * @param {string|string[]} keys - A string or array of strings specifying keys to get.
-   * @returns {Promise<Object>} Resolves with the retrieved values.
-   */
-  storageGet(keys) {
-    return new Promise((resolve) => chrome.storage.local.get(keys, resolve));
-  },
-
-  /**
-   * Set values in chrome.storage.local.
-   * @param {Object} values - An object which gives each key/value pair to update storage with.
-   * @returns {Promise<void>} Resolves when the values are set.
-   */
-  storageSet(values) {
-    return new Promise((resolve) => chrome.storage.local.set(values, resolve));
-  },
-
-  /**
-   * Create a new bookmark or folder.
-   * @param {chrome.bookmarks.CreateDetails} details - Details about the bookmark or folder to create.
-   * @returns {Promise<chrome.bookmarks.BookmarkTreeNode>} Resolves with the created bookmark node.
-   */
-  bookmarksCreate(details) {
-    return new Promise((resolve, reject) =>
-      chrome.bookmarks.create(details, (node) => {
-        if (chrome.runtime && chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        resolve(node);
-      }),
-    );
-  },
-
-  /**
-   * Update a bookmark or folder.
-   * @param {string} id - The ID of the bookmark or folder to update.
-   * @param {Object} changes - The changes to apply.
-   * @returns {Promise<chrome.bookmarks.BookmarkTreeNode>} Resolves with the updated bookmark node.
-   */
-  bookmarksUpdate(id, changes) {
-    return new Promise((resolve, reject) =>
-      chrome.bookmarks.update(id, changes, (node) => {
-        if (chrome.runtime && chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        resolve(node);
-      }),
-    );
-  },
-
-  /**
-   * Move a bookmark or folder to a new location.
-   * @param {string} id - The ID of the bookmark or folder to move.
-   * @param {Object} destination - The destination information.
-   * @returns {Promise<chrome.bookmarks.BookmarkTreeNode>} Resolves with the moved bookmark node.
-   */
-  bookmarksMove(id, destination) {
-    return new Promise((resolve, reject) =>
-      chrome.bookmarks.move(id, destination, (node) => {
-        if (chrome.runtime && chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        resolve(node);
-      }),
-    );
-  },
-
-  /**
-   * Remove a bookmark or empty folder.
-   * @param {string} id - The ID of the bookmark or folder to remove.
-   * @returns {Promise<void>} Resolves when the bookmark or folder is removed.
-   */
-  bookmarksRemove(id) {
-    return new Promise((resolve, reject) =>
-      chrome.bookmarks.remove(id, () => {
-        if (chrome.runtime && chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        resolve();
-      }),
-    );
-  },
-
-  /**
-   * Remove a bookmark folder and all its contents recursively.
-   * @param {string} id - The ID of the folder to remove.
-   * @returns {Promise<void>} Resolves when the folder and all its contents are removed.
-   */
-  bookmarksRemoveTree(id) {
-    return new Promise((resolve, reject) =>
-      chrome.bookmarks.removeTree(id, () => {
-        if (chrome.runtime && chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        resolve();
-      }),
-    );
-  },
-
-  /**
-   * Retrieve a bookmark or folder by ID.
-   * @param {string} id - The ID of the bookmark or folder to retrieve.
-   * @returns {Promise<chrome.bookmarks.BookmarkTreeNode[]>} Resolves with an array of bookmark nodes.
-   */
-  bookmarksGet(id) {
-    return new Promise((resolve, reject) =>
-      chrome.bookmarks.get(id, (nodes) => {
-        if (chrome.runtime && chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        resolve(nodes);
-      }),
-    );
-  },
-
-  /**
-   * Retrieve the children of a bookmark folder.
-   * @param {string} id - The ID of the folder.
-   * @returns {Promise<chrome.bookmarks.BookmarkTreeNode[]>} Resolves with an array of child bookmark nodes.
-   */
-  bookmarksGetChildren(id) {
-    return new Promise((resolve, reject) =>
-      chrome.bookmarks.getChildren(id, (nodes) => {
-        if (chrome.runtime && chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        resolve(nodes);
-      }),
-    );
-  },
-
-  /**
-   * Retrieve the entire bookmarks tree.
-   * @returns {Promise<chrome.bookmarks.BookmarkTreeNode[]>} Resolves with the root nodes of the bookmarks tree.
-   */
-  bookmarksGetTree() {
-    return new Promise((resolve, reject) =>
-      chrome.bookmarks.getTree((nodes) => {
-        if (chrome.runtime && chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        resolve(nodes);
-      }),
-    );
-  },
-};
+import { chromeP } from './modules/chrome.js';
 
 // ===== Types =====
 
@@ -250,11 +103,7 @@ const chromeP = {
  * @throws {Error} Throws an error if the API response is not OK, including the status and error text.
  */
 async function apiGET(pathWithQuery) {
-  const url = `${RAINDROP_API_BASE}${
-    pathWithQuery.startsWith('/') ? '' : '/'
-  }${pathWithQuery}`;
   if (!RAINDROP_API_TOKEN) {
-    // Load token lazily from storage
     try {
       const data = await chromeP.storageGet('raindropApiToken');
       RAINDROP_API_TOKEN =
@@ -267,24 +116,17 @@ async function apiGET(pathWithQuery) {
     );
     throw new Error('Missing Raindrop API token');
   }
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${RAINDROP_API_TOKEN}`,
-    },
-  });
-  if (!res.ok) {
-    if (res.status === 401 || res.status === 403) {
+  try {
+    setRaindropToken(RAINDROP_API_TOKEN);
+    return await raindropGET(pathWithQuery);
+  } catch (err) {
+    if (err && (err.status === 401 || err.status === 403)) {
       notifyMissingOrInvalidToken(
         'Invalid API token. Please update your Raindrop API token.',
       );
     }
-    const text = await res.text().catch(() => '');
-    throw new Error(
-      `Raindrop API error ${res.status} for ${pathWithQuery}: ${text}`,
-    );
+    throw err;
   }
-  return res.json();
 }
 
 /**
@@ -293,27 +135,7 @@ async function apiGET(pathWithQuery) {
  * Debounced to avoid spamming.
  * @param {string} message
  */
-function notifyMissingOrInvalidToken(message) {
-  const now = Date.now();
-  if (now - lastTokenNotificationMs < 60000) return; // debounce 60s
-  lastTokenNotificationMs = now;
-  try {
-    const iconUrl = chrome.runtime.getURL('icons/icon-128x128.png');
-    chrome.notifications?.create(
-      TOKEN_NOTIFICATION_ID,
-      {
-        type: 'basic',
-        iconUrl,
-        title: 'Raindrop Sync: Action required',
-        message:
-          message || 'Please configure your Raindrop API token in Options.',
-        priority: 2,
-        requireInteraction: true,
-      },
-      () => {},
-    );
-  } catch (_) {}
-}
+// notification helper moved to modules/notifications
 
 // ===== Storage Helpers =====
 /**
@@ -384,19 +206,7 @@ async function saveState(partial) {
  *
  * @returns {Promise<string>} The id of the "Bookmarks Bar" folder.
  */
-async function getBookmarksBarFolderId() {
-  // Chrome commonly uses id '1' for Bookmarks Bar, but do not assume
-  const tree = await chromeP.bookmarksGetTree();
-  const root = tree && tree[0];
-  if (!root || !root.children) return '1';
-  const bar = root.children.find(
-    (n) =>
-      n.id === '1' ||
-      (n.title || '').toLowerCase().includes('bookmarks bar') ||
-      (n.title || '').toLowerCase().includes('bookmarks'),
-  );
-  return bar ? bar.id : '1';
-}
+// delegated to modules/bookmarks.js
 
 /**
  * Gets the id of the extension's root folder ("Raindrop Bookmarks"),
@@ -407,31 +217,7 @@ async function getBookmarksBarFolderId() {
  * @returns {Promise<string>} The Chrome bookmarks folder id for the root.
  */
 async function getOrCreateRootFolder() {
-  const state = await loadState();
-  if (state.rootFolderId) {
-    // Verify it still exists
-    try {
-      const nodes = await chromeP.bookmarksGet(state.rootFolderId);
-      if (nodes && nodes.length) return state.rootFolderId;
-    } catch (_) {
-      // fallthrough to recreate
-    }
-  }
-
-  const barId = await getBookmarksBarFolderId();
-  const children = await chromeP.bookmarksGetChildren(barId);
-  const existing = children.find((c) => c.title === ROOT_FOLDER_NAME && !c.url);
-  if (existing) {
-    await saveState({ rootFolderId: existing.id });
-    return existing.id;
-  }
-
-  const node = await chromeP.bookmarksCreate({
-    parentId: barId,
-    title: ROOT_FOLDER_NAME,
-  });
-  await saveState({ rootFolderId: node.id });
-  return node.id;
+  return bmGetOrCreateRootFolder(loadState, saveState);
 }
 
 /**
@@ -442,13 +228,7 @@ async function getOrCreateRootFolder() {
  * @param {string} title - The title of the child folder to find or create.
  * @returns {Promise<string>} The ID of the found or newly created child folder.
  */
-async function getOrCreateChildFolder(parentId, title) {
-  const children = await chromeP.bookmarksGetChildren(parentId);
-  const found = children.find((c) => !c.url && c.title === title);
-  if (found) return found.id;
-  const node = await chromeP.bookmarksCreate({ parentId, title });
-  return node.id;
-}
+const getOrCreateChildFolder = bmGetOrCreateChildFolder;
 
 // ===== Raindrop Collections and Groups =====
 /**
@@ -1223,29 +1003,35 @@ async function performSync() {
   }
 }
 
-// // ===== Alarms and Lifecycle =====
-// chrome.runtime.onInstalled.addListener(async () => {
-//   try {
-//     chrome.alarms.create(ALARM_NAME, { periodInMinutes: SYNC_PERIOD_MINUTES });
-//   } catch (_) {}
-//   // Optionally run an initial sync shortly after install
-//   setTimeout(() => {
-//     performSync();
-//   }, 5000);
-// });
+// ===== Alarms and Lifecycle =====
+chrome.runtime.onInstalled.addListener(async () => {
+  try {
+    chrome.alarms.create(ALARM_NAME, { periodInMinutes: SYNC_PERIOD_MINUTES });
+  } catch (_) {}
+  // Cleanup legacy folders created by previous versions
+  try {
+    await removeLegacyTopFolders();
+  } catch (_) {}
+  // Optionally run an initial sync shortly after install
+  setTimeout(() => {
+    performSync();
+  }, 3000);
+});
 
-// chrome.runtime.onStartup?.addListener(() => {
-//   try {
-//     chrome.alarms.create(ALARM_NAME, { periodInMinutes: SYNC_PERIOD_MINUTES });
-//   } catch (_) {}
-// });
+chrome.runtime.onStartup?.addListener(() => {
+  try {
+    chrome.alarms.create(ALARM_NAME, { periodInMinutes: SYNC_PERIOD_MINUTES });
+  } catch (_) {}
+  // Cleanup legacy folders at startup as well
+  removeLegacyTopFolders().catch(() => {});
+});
 
-// chrome.alarms.onAlarm.addListener((alarm) => {
-//   if (alarm && alarm.name === ALARM_NAME) {
-//     // Note: async function keeps service worker alive until completion
-//     performSync();
-//   }
-// });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm && alarm.name === ALARM_NAME) {
+    // Note: async function keeps service worker alive until completion
+    performSync();
+  }
+});
 
 // Optional: manual trigger via action click for testing
 chrome.action?.onClicked.addListener(() => {
