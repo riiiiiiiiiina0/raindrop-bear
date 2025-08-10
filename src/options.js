@@ -18,6 +18,9 @@
   const notifyStatusEl = /** @type {HTMLSpanElement|null} */ (
     document.getElementById('notify-status')
   );
+  const actionEl = /** @type {HTMLSelectElement|null} */ (
+    document.getElementById('action-behavior')
+  );
 
   if (
     !(formEl instanceof HTMLFormElement) ||
@@ -25,44 +28,33 @@
     !(saveEl instanceof HTMLButtonElement) ||
     !(statusEl instanceof HTMLSpanElement) ||
     !(notifyEl instanceof HTMLInputElement) ||
-    !(notifyStatusEl instanceof HTMLSpanElement)
+    !(notifyStatusEl instanceof HTMLSpanElement) ||
+    !(actionEl instanceof HTMLSelectElement)
   ) {
     // DOM not ready; abort quietly
     return;
   }
 
-  /**
-   * @param {string} text
-   * @param {"success"|"error"|"info"} [type]
-   */
-  function setStatus(text, type) {
-    if (!statusEl) return;
-    statusEl.textContent = text || '';
-    const colorClass =
-      type === 'success'
-        ? 'text-green-600 dark:text-green-400'
-        : type === 'error'
-        ? 'text-red-600 dark:text-red-400'
-        : 'text-blue-600 dark:text-blue-400';
-    statusEl.className = `text-sm ${colorClass}`;
-  }
-
   function load() {
     try {
-      chrome.storage.local.get(['raindropApiToken', 'notifyOnSync'], (data) => {
-        if (tokenEl) tokenEl.value = (data && data.raindropApiToken) || '';
-        const enabled =
-          data && typeof data.notifyOnSync === 'boolean'
-            ? data.notifyOnSync
-            : true; // default ON
-        if (notifyEl) notifyEl.checked = !!enabled;
-      });
+      chrome.storage.local.get(
+        ['raindropApiToken', 'notifyOnSync', 'actionBehavior'],
+        (data) => {
+          if (tokenEl) tokenEl.value = (data && data.raindropApiToken) || '';
+          const enabled =
+            data && typeof data.notifyOnSync === 'boolean'
+              ? data.notifyOnSync
+              : true; // default ON
+          if (notifyEl) notifyEl.checked = !!enabled;
+          const behavior = (data && data.actionBehavior) || 'sync';
+          if (actionEl) actionEl.value = behavior;
+        },
+      );
     } catch (_) {}
   }
 
   function save() {
     if (saveEl) saveEl.disabled = true;
-    setStatus('Saving…', 'info');
     const value = tokenEl ? tokenEl.value.trim() : '';
     try {
       chrome.storage.local.set({ raindropApiToken: value }, () => {
@@ -82,7 +74,6 @@
         if (saveEl) saveEl.disabled = false;
       });
     } catch (e) {
-      setStatus('Failed to save', 'error');
       if (saveEl) saveEl.disabled = false;
     }
   }
@@ -122,6 +113,26 @@
           notifyStatusEl.className = 'text-sm text-red-600 dark:text-red-400';
         }
       }
+    });
+
+  // action behavior: save immediately
+  if (actionEl)
+    actionEl.addEventListener('change', () => {
+      const value = actionEl.value || 'sync';
+      try {
+        chrome.storage.local.set({ actionBehavior: value }, () => {
+          try {
+            /** @type {any} */ (window)
+              .Toastify({
+                text: '⚙️ Action behavior saved',
+                duration: 3000,
+                position: 'right',
+                style: { background: '#64748b' },
+              })
+              .showToast();
+          } catch (_) {}
+        });
+      } catch (_) {}
     });
   load();
 })();

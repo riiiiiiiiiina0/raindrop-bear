@@ -6,6 +6,7 @@ import {
   apiGET as raindropGET,
   setApiToken as setRaindropToken,
   loadTokenIfNeeded,
+  apiPOST as raindropPOST,
 } from './modules/raindrop.js';
 // API token is loaded from storage (set via Options page)
 let RAINDROP_API_TOKEN = '';
@@ -15,6 +16,7 @@ import {
   notifySyncSuccess,
   notifySyncFailure,
   SYNC_SUCCESS_NOTIFICATION_ID,
+  notify,
 } from './modules/notifications.js';
 
 const ALARM_NAME = 'raindrop-sync';
@@ -1051,6 +1053,10 @@ async function performSync() {
     }
   } finally {
     isSyncing = false;
+    // Force refresh of badge text to avoid stale "Sync" lingering in some cases
+    try {
+      clearBadge();
+    } catch (_) {}
     if (didSucceed) {
       // Success badge
       setBadge('Done', '#22c55e'); // Tailwind green-500
@@ -1114,9 +1120,136 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 // Optional: manual trigger via action click for testing
-chrome.action?.onClicked.addListener(() => {
-  performSync();
+chrome.action?.onClicked.addListener(async (tab) => {
+  try {
+    const data = await chromeP.storageGet('actionBehavior');
+    const behavior = (data && data.actionBehavior) || 'sync';
+    if (behavior === 'none') return;
+    if (behavior === 'options') {
+      try {
+        chrome.runtime.openOptionsPage();
+      } catch (_) {}
+      return;
+    }
+    if (behavior === 'save') {
+      await saveCurrentOrHighlightedTabsToRaindrop();
+      return;
+    }
+    // default: sync
+    performSync();
+  } catch (_) {
+    performSync();
+  }
 });
+
+/**
+ * Saves the current active tab or highlighted tabs to Raindrop Unsorted collection
+ * and creates local bookmarks at the top of the local Unsorted folder.
+ */
+async function saveCurrentOrHighlightedTabsToRaindrop() {
+  // Show badge
+  setBadge('Saving', '#f59e0b'); // amber-500
+  let titlesAndUrls = [];
+  try {
+    const tabs = await new Promise((resolve) =>
+      chrome.tabs.query(
+        { windowId: chrome.windows.WINDOW_ID_CURRENT, highlighted: true },
+        (ts) => resolve(ts || []),
+      ),
+    );
+    let candidates =
+      Array.isArray(tabs) && tabs.length > 0
+        ? tabs
+        : await new Promise((resolve) =>
+            chrome.tabs.query({ active: true, currentWindow: true }, (ts) =>
+              resolve(ts || []),
+            ),
+          );
+    for (const t of candidates) {
+      const url = (t && t.url) || '';
+      if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
+        titlesAndUrls.push({ title: (t && t.title) || url, url });
+      }
+    }
+    if (titlesAndUrls.length === 0)
+      throw new Error('No eligible tabs to save.');
+
+    // Ensure we have collection mapping and local Unsorted folder id
+    const state = await loadState();
+    const collectionMap = { ...(state.collectionMap || {}) };
+    const unsortedFolderId = await ensureUnsortedFolder(collectionMap);
+
+    // POST many to Raindrop unsorted with pleaseParse
+    await loadTokenIfNeeded();
+    const body = {
+      items: titlesAndUrls.map(({ title, url }) => ({
+        link: url,
+        title: title || url,
+        collection: { $id: UNSORTED_COLLECTION_ID },
+        pleaseParse: {},
+      })),
+    };
+    const res = await raindropPOST('raindrops', body);
+    const createdItems = res && Array.isArray(res.items) ? res.items : [];
+    const successCount = createdItems.length;
+
+    // Create local bookmarks at top of Unsorted for the source URLs (avoid empty folders)
+    // Map Raindrop ids by link so we can persist itemMap
+    const linkToId = new Map();
+    for (const it of createdItems) {
+      const link = it && (it.link || it.url);
+      const id =
+        it &&
+        (it._id != null ? String(it._id) : it.id != null ? String(it.id) : '');
+      if (link && id) linkToId.set(link, id);
+    }
+    const toCreateLocally = titlesAndUrls.map(({ title, url }) => ({
+      id: linkToId.get(url) || '',
+      title: title || url,
+      url,
+    }));
+    // Merge mappings so future sync recognizes these new items
+    const mergedItemMap = { ...((state && state.itemMap) || {}) };
+    for (const { id, title, url } of toCreateLocally.slice().reverse()) {
+      try {
+        const node = await chromeP.bookmarksCreate({
+          parentId: unsortedFolderId,
+          title: title || url,
+          url,
+          index: 0,
+        });
+        if (id) mergedItemMap[id] = node.id;
+      } catch (_) {}
+    }
+    try {
+      await saveState({ itemMap: mergedItemMap });
+    } catch (_) {}
+
+    if (successCount > 0) {
+      setBadge('Saved', '#22c55e'); // green-500
+      scheduleClearBadge(3000);
+      try {
+        notify(
+          `Saved ${successCount} page${
+            successCount > 1 ? 's' : ''
+          } to Raindrop`,
+        );
+      } catch (_) {}
+    } else {
+      setBadge('Error', '#ef4444');
+      scheduleClearBadge(3000);
+      try {
+        notify('Failed to save tab(s) to Raindrop');
+      } catch (_) {}
+    }
+  } catch (err) {
+    setBadge('Error', '#ef4444');
+    scheduleClearBadge(3000);
+    try {
+      notify('Failed to save tab(s) to Raindrop');
+    } catch (_) {}
+  }
+}
 
 // Listen for storage changes to update token immediately
 chrome.storage?.onChanged.addListener((changes, area) => {
