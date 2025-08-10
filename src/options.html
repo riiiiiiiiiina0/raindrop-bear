@@ -4,26 +4,56 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Raindrop Bear Options</title>
+  <meta name="color-scheme" content="light dark" />
+  <title>Raindrop Bear — Options</title>
   <script src="../libs/tailwindcss@4.js"></script>
+  <link rel="icon" href="../icons/icon-32x32.png" />
+  <meta name="theme-color" content="#0ea5e9" />
+  <style>
+    /* Improve font smoothing and transitions */
+    :root {
+      color-scheme: light dark;
+    }
+  </style>
 </head>
 
-<body class="min-h-screen bg-gray-50 text-gray-900">
-  <main class="max-w-3xl mx-auto p-6">
-    <h1 class="text-xl font-semibold mb-4">Raindrop Bear Options</h1>
+<body
+  class="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 antialiased selection:bg-blue-600/20">
+  <main class="max-w-xl mx-auto p-6">
+    <header class="flex items-center gap-3 mb-6">
+      <img src="../icons/icon-48x48.png" alt="" class="h-8 w-8 rounded-md shadow-sm" />
+      <h1 class="text-2xl font-semibold tracking-tight">Raindrop Bear</h1>
+    </header>
 
-    <div class="space-y-2 mb-6">
-      <label for="token" class="block font-medium">Raindrop API Token</label>
-      <input id="token" type="text" placeholder="Enter your Raindrop API token"
-        class="w-full max-w-2xl rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-      <p class="text-sm text-gray-600">Token is stored locally in your browser and used to call api.raindrop.io.</p>
-    </div>
+    <section class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div class="mb-4">
+        <h2 class="text-base/6 font-medium">Authentication</h2>
+        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          Enter your Raindrop API token. It is stored locally and used only to communicate with
+          <span class="font-mono text-gray-800 dark:text-gray-200">api.raindrop.io</span>.
+        </p>
+      </div>
 
-    <div class="flex items-center">
-      <button id="save"
-        class="inline-flex items-center rounded-lg bg-blue-600 text-white px-4 py-2 hover:bg-blue-700 disabled:opacity-60">Save</button>
-      <span id="status" class="ml-3 text-sm"></span>
-    </div>
+      <form id="auth-form" class="space-y-4">
+        <label class="block">
+          <span class="text-sm font-medium">API token</span>
+          <input id="token" type="password" autocomplete="off" placeholder="raindrop_api_xxx…"
+            class="mt-2 w-full rounded-lg border border-gray-300 bg-white/60 px-3 py-2 text-base shadow-sm outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-950/60 dark:placeholder:text-gray-500" />
+        </label>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <button id="save" type="submit"
+            class="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
+            Save
+          </button>
+          <a href="https://app.raindrop.io/settings/integrations" target="_blank" rel="noopener noreferrer"
+            class="text-sm text-blue-600 hover:underline dark:text-blue-400">
+            Find or generate your API token
+          </a>
+          <span id="status" class="text-sm"></span>
+        </div>
+      </form>
+    </section>
   </main>
   <script src="options.js"></script>
 </body>

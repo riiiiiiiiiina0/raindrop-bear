@@ -1,4 +1,7 @@
 (() => {
+  const formEl = /** @type {HTMLFormElement|null} */ (
+    document.getElementById('auth-form')
+  );
   const tokenEl = /** @type {HTMLInputElement|null} */ (
     document.getElementById('token')
   );
@@ -10,6 +13,7 @@
   );
 
   if (
+    !(formEl instanceof HTMLFormElement) ||
     !(tokenEl instanceof HTMLInputElement) ||
     !(saveEl instanceof HTMLButtonElement) ||
     !(statusEl instanceof HTMLSpanElement)
@@ -18,12 +22,20 @@
     return;
   }
 
-  function setStatus(text, ok) {
+  /**
+   * @param {string} text
+   * @param {"success"|"error"|"info"} [type]
+   */
+  function setStatus(text, type) {
     if (!statusEl) return;
     statusEl.textContent = text || '';
-    statusEl.className = `ml-3 text-sm ${
-      ok ? 'text-green-600' : 'text-red-600'
-    }`;
+    const colorClass =
+      type === 'success'
+        ? 'text-green-600 dark:text-green-400'
+        : type === 'error'
+        ? 'text-red-600 dark:text-red-400'
+        : 'text-blue-600 dark:text-blue-400';
+    statusEl.className = `text-sm ${colorClass}`;
   }
 
   function load() {
@@ -36,19 +48,24 @@
 
   function save() {
     if (saveEl) saveEl.disabled = true;
-    setStatus('Saving…', true);
+    setStatus('Saving…', 'info');
     const value = tokenEl ? tokenEl.value.trim() : '';
     try {
       chrome.storage.local.set({ raindropApiToken: value }, () => {
-        setStatus('Saved', true);
+        setStatus('Saved', 'success');
         if (saveEl) saveEl.disabled = false;
       });
     } catch (e) {
-      setStatus('Failed to save', false);
+      setStatus('Failed to save', 'error');
       if (saveEl) saveEl.disabled = false;
     }
   }
 
   if (saveEl) saveEl.addEventListener('click', save);
+  if (formEl)
+    formEl.addEventListener('submit', (e) => {
+      e.preventDefault();
+      save();
+    });
   load();
 })();
