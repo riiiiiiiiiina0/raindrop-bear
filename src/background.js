@@ -7,6 +7,8 @@ import {
   setApiToken as setRaindropToken,
   loadTokenIfNeeded,
   apiPOST as raindropPOST,
+  apiPUT as raindropPUT,
+  apiDELETE as raindropDELETE,
 } from './modules/raindrop.js';
 // API token is loaded from storage (set via Options page)
 let RAINDROP_API_TOKEN = '';
@@ -1073,6 +1075,201 @@ async function performSync() {
     }
   }
 }
+
+// ===== Bi-directional Sync Helpers =====
+
+/**
+ * Creates a reverse map from a given map object.
+ * @param {Object} map - The original map (e.g., { key1: value1, key2: value2 }).
+ * @returns {Map<string, string>} A new Map with keys and values swapped.
+ */
+function getReverseMap(map) {
+  const reverseMap = new Map();
+  if (!map) return reverseMap;
+  for (const [key, value] of Object.entries(map)) {
+    reverseMap.set(String(value), String(key));
+  }
+  return reverseMap;
+}
+
+/**
+ * Checks if a bookmark node is a descendant of the Raindrop root folder.
+ * @param {string} nodeId - The ID of the bookmark node to check.
+ * @param {string} rootFolderId - The ID of the Raindrop root folder.
+ * @returns {Promise<boolean>} True if the node is a descendant, false otherwise.
+ */
+async function isDescendantOfRoot(nodeId, rootFolderId) {
+  if (!nodeId || !rootFolderId) return false;
+  if (nodeId === rootFolderId) return false;
+
+  try {
+    let currentNodeId = nodeId;
+    const visited = new Set();
+    while (currentNodeId && !visited.has(currentNodeId)) {
+      visited.add(currentNodeId);
+      const nodes = await chromeP.bookmarksGet(currentNodeId);
+      const node = nodes && nodes[0];
+      if (!node || !node.parentId) {
+        return false;
+      }
+      if (node.parentId === rootFolderId) {
+        return true;
+      }
+      currentNodeId = node.parentId;
+    }
+  } catch (e) {
+    return false;
+  }
+  return false;
+}
+
+
+// ===== Bookmark Change Listeners (for bi-directional sync) =====
+chrome.bookmarks.onCreated.addListener(async (id, bookmark) => {
+  if (isSyncing) return;
+
+  const state = await loadState();
+  if (!state.rootFolderId || (bookmark.parentId !== state.rootFolderId && !(await isDescendantOfRoot(bookmark.parentId, state.rootFolderId)))) {
+      return;
+  }
+
+  try {
+    const reverseCollectionMap = getReverseMap(state.collectionMap);
+    const parentRaindropId = reverseCollectionMap.get(bookmark.parentId);
+
+    if (bookmark.url) {
+      // It's a bookmark
+      const collectionId = parentRaindropId || UNSORTED_COLLECTION_ID;
+      const newRaindrop = await raindropPOST('raindrop', {
+        link: bookmark.url,
+        title: bookmark.title,
+        collection: { $id: collectionId },
+      });
+      if (newRaindrop && newRaindrop.item) {
+        const itemMap = { ...state.itemMap };
+        itemMap[String(newRaindrop.item._id)] = id;
+        await saveState({ itemMap });
+      }
+    } else {
+      // It's a folder
+      const payload = { title: bookmark.title };
+      if (parentRaindropId) {
+          payload.parent = { $id: parentRaindropId };
+      }
+      const newCollection = await raindropPOST('collection', payload);
+      if (newCollection && newCollection.item) {
+        const collectionMap = { ...state.collectionMap };
+        collectionMap[String(newCollection.item._id)] = id;
+        await saveState({ collectionMap });
+      }
+    }
+  } catch (err) {
+    console.error('Failed to sync creation to Raindrop:', err);
+  }
+});
+
+chrome.bookmarks.onRemoved.addListener(async (id, removeInfo) => {
+  if (isSyncing) return;
+
+  const state = await loadState();
+  const reverseItemMap = getReverseMap(state.itemMap);
+  const reverseCollectionMap = getReverseMap(state.collectionMap);
+
+  try {
+    if (reverseItemMap.has(id)) {
+      const raindropId = reverseItemMap.get(id);
+      await raindropDELETE(`raindrop/${raindropId}`);
+      const itemMap = { ...state.itemMap };
+      const raindropKey = Object.keys(itemMap).find(key => itemMap[key] === id);
+      if (raindropKey) {
+        delete itemMap[raindropKey];
+        await saveState({ itemMap });
+      }
+    } else if (reverseCollectionMap.has(id)) {
+      const raindropId = reverseCollectionMap.get(id);
+      await raindropDELETE(`collection/${raindropId}`);
+      const collectionMap = { ...state.collectionMap };
+      const raindropKey = Object.keys(collectionMap).find(key => collectionMap[key] === id);
+       if (raindropKey) {
+        delete collectionMap[raindropKey];
+        await saveState({ collectionMap });
+      }
+    }
+  } catch (err) {
+    console.error('Failed to sync deletion to Raindrop:', err);
+  }
+});
+
+chrome.bookmarks.onChanged.addListener(async (id, changeInfo) => {
+  if (isSyncing) return;
+
+  const state = await loadState();
+  if (!state.rootFolderId || !(await isDescendantOfRoot(id, state.rootFolderId))) {
+    return;
+  }
+
+  const reverseItemMap = getReverseMap(state.itemMap);
+  const reverseCollectionMap = getReverseMap(state.collectionMap);
+
+  try {
+    if (reverseItemMap.has(id)) {
+      const raindropId = reverseItemMap.get(id);
+      const [bookmark] = await chromeP.bookmarksGet(id);
+      if (bookmark) {
+        await raindropPUT(`raindrop/${raindropId}`, {
+          title: bookmark.title,
+          link: bookmark.url,
+        });
+      }
+    } else if (reverseCollectionMap.has(id)) {
+      const raindropId = reverseCollectionMap.get(id);
+      const [folder] = await chromeP.bookmarksGet(id);
+      if (folder) {
+        await raindropPUT(`collection/${raindropId}`, {
+          title: folder.title,
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Failed to sync change to Raindrop:', err);
+  }
+});
+
+chrome.bookmarks.onMoved.addListener(async (id, moveInfo) => {
+  if (isSyncing) return;
+
+  const state = await loadState();
+  if (!state.rootFolderId ||
+      (moveInfo.parentId !== state.rootFolderId && !(await isDescendantOfRoot(moveInfo.parentId, state.rootFolderId)))) {
+    return;
+  }
+
+  const reverseItemMap = getReverseMap(state.itemMap);
+  const reverseCollectionMap = getReverseMap(state.collectionMap);
+  const newParentRaindropId = getReverseMap(state.collectionMap).get(moveInfo.parentId);
+
+  try {
+    if (reverseItemMap.has(id)) {
+      // Bookmark moved
+      const raindropId = reverseItemMap.get(id);
+      const collectionId = newParentRaindropId || UNSORTED_COLLECTION_ID;
+      await raindropPUT(`raindrop/${raindropId}`, {
+        collection: { $id: collectionId },
+      });
+    } else if (reverseCollectionMap.has(id)) {
+      // Folder moved
+      const raindropId = reverseCollectionMap.get(id);
+      const payload = {};
+      if (newParentRaindropId) {
+          payload.parent = { $id: newParentRaindropId };
+      }
+      // If newParentRaindropId is null, it becomes a root collection.
+      await raindropPUT(`collection/${raindropId}`, payload);
+    }
+  } catch (err) {
+    console.error('Failed to sync move to Raindrop:', err);
+  }
+});
 
 // ===== Alarms and Lifecycle =====
 chrome.runtime.onInstalled.addListener(async (details) => {

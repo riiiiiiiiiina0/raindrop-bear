@@ -59,6 +59,65 @@ export async function apiGET(pathWithQuery) {
 }
 
 /**
+ * Performs a PUT request to the Raindrop API with the given path and JSON body.
+ *
+ * @param {string} path - The API path (with or without leading slash), e.g. "/raindrop/123".
+ * @param {any} body - The request body which will be JSON.stringify'ed.
+ * @returns {Promise<any>} The parsed JSON response from the Raindrop API.
+ * @throws {Error} If the API response is not OK, throws an error with status and statusText.
+ */
+export async function apiPUT(path, body) {
+  const url = `${RAINDROP_API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+  await loadTokenIfNeeded();
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${RAINDROP_API_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body || {}),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    const err = new Error(
+      `Raindrop API error ${res.status} for ${path}: ${text}`,
+    );
+    err['status'] = res.status;
+    err['statusText'] = res.statusText;
+    throw err;
+  }
+  return res.json();
+}
+
+/**
+ * Performs a DELETE request to the Raindrop API with the given path.
+ *
+ * @param {string} path - The API path (with or without leading slash), e.g. "/raindrop/123".
+ * @returns {Promise<any>} The parsed JSON response from the Raindrop API.
+ * @throws {Error} If the API response is not OK, throws an error with status and statusText.
+ */
+export async function apiDELETE(path) {
+  const url = `${RAINDROP_API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+  await loadTokenIfNeeded();
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${RAINDROP_API_TOKEN}`,
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    const err = new Error(
+      `Raindrop API error ${res.status} for ${path}: ${text}`,
+    );
+    err['status'] = res.status;
+    err['statusText'] = res.statusText;
+    throw err;
+  }
+  return res.json();
+}
+
+/**
  * Performs a POST request to the Raindrop API with the given path and JSON body.
  *
  * @param {string} path - The API path (with or without leading slash), e.g. "/raindrop".
