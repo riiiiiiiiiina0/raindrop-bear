@@ -12,10 +12,14 @@ let RAINDROP_API_TOKEN = '';
 import {
   notifyMissingOrInvalidToken,
   TOKEN_NOTIFICATION_ID,
+  notifySyncSuccess,
+  notifySyncFailure,
+  SYNC_SUCCESS_NOTIFICATION_ID,
 } from './modules/notifications.js';
 
 const ALARM_NAME = 'raindrop-sync';
 const SYNC_PERIOD_MINUTES = 10;
+const BADGE_CLEAR_ALARM = 'raindrop-clear-badge';
 
 const STORAGE_KEYS = {
   lastSync: 'lastSync',
@@ -127,6 +131,34 @@ async function apiGET(pathWithQuery) {
     }
     throw err;
   }
+}
+
+// ===== UI Badge Helpers =====
+function setBadge(text, backgroundColor) {
+  try {
+    chrome.action?.setBadgeText({ text: text || '' });
+    if (backgroundColor) {
+      chrome.action?.setBadgeBackgroundColor({ color: backgroundColor });
+    }
+  } catch (_) {}
+}
+
+function clearBadge() {
+  try {
+    chrome.action?.setBadgeText({ text: '' });
+  } catch (_) {}
+}
+
+function scheduleClearBadge(delayMs) {
+  try {
+    chrome.alarms.clear('raindrop-clear-badge', () => {
+      try {
+        chrome.alarms.create('raindrop-clear-badge', {
+          when: Date.now() + Math.max(0, delayMs || 0),
+        });
+      } catch (_) {}
+    });
+  } catch (_) {}
 }
 
 /**
@@ -952,6 +984,18 @@ async function ensureRootAndMaybeReset(state) {
 async function performSync() {
   if (isSyncing) return;
   isSyncing = true;
+  // Read user preference (default ON)
+  let notifyPref = true;
+  try {
+    const data = await chromeP.storageGet('notifyOnSync');
+    if (data && typeof data.notifyOnSync === 'boolean') {
+      notifyPref = data.notifyOnSync;
+    }
+  } catch (_) {}
+
+  let didSucceed = false;
+  // Show action badge during sync
+  setBadge('Sync', '#38bdf8'); // Tailwind sky-400
   try {
     let state = await loadState();
     // If root folder missing (deleted by user), reset and treat as initial sync
@@ -992,14 +1036,35 @@ async function performSync() {
       collectionMap,
       itemMap: prunedItemMap,
     });
+    didSucceed = true;
   } catch (err) {
     // Log but do not throw; next alarm will retry
     console.error(
       'Raindrop sync failed:',
       err && err.message ? err.message : err,
     );
+    if (notifyPref) {
+      const msg = err && err.message ? String(err.message) : 'Unknown error';
+      try {
+        notifySyncFailure(`Sync failed: ${msg}`);
+      } catch (_) {}
+    }
   } finally {
     isSyncing = false;
+    if (didSucceed) {
+      // Success badge
+      setBadge('Done', '#22c55e'); // Tailwind green-500
+      scheduleClearBadge(3000);
+    } else {
+      // Failure badge
+      setBadge('Error', '#ef4444'); // Tailwind red-500
+      scheduleClearBadge(3000);
+    }
+    if (didSucceed && notifyPref) {
+      try {
+        notifySyncSuccess('Sync completed successfully.');
+      } catch (_) {}
+    }
   }
 }
 
@@ -1043,6 +1108,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm && alarm.name === ALARM_NAME) {
     // Note: async function keeps service worker alive until completion
     performSync();
+  } else if (alarm && alarm.name === 'raindrop-clear-badge') {
+    clearBadge();
   }
 });
 
@@ -1075,5 +1142,26 @@ chrome.notifications?.onClicked.addListener((notificationId) => {
     try {
       chrome.notifications.clear(notificationId);
     } catch (_) {}
+  } else if (notificationId === SYNC_SUCCESS_NOTIFICATION_ID) {
+    (async () => {
+      try {
+        const data = await chromeP.storageGet('rootFolderId');
+        const rootId =
+          data && data.rootFolderId ? String(data.rootFolderId) : '';
+        const url = rootId
+          ? `chrome://bookmarks/?id=${encodeURIComponent(rootId)}`
+          : 'chrome://bookmarks';
+        try {
+          chrome.tabs?.create({ url });
+        } catch (_) {
+          try {
+            chrome.tabs?.create({ url: 'chrome://bookmarks' });
+          } catch (_) {}
+        }
+      } catch (_) {}
+      try {
+        chrome.notifications.clear(notificationId);
+      } catch (_) {}
+    })();
   }
 });

@@ -1,5 +1,7 @@
 export const TOKEN_NOTIFICATION_ID = 'raindrop-token-required';
 let lastTokenNotificationMs = 0;
+export const SYNC_SUCCESS_NOTIFICATION_ID = 'raindrop-sync-success';
+export const SYNC_FAILURE_NOTIFICATION_ID = 'raindrop-sync-failure';
 
 /**
  * Shows a basic notification to the user with the given message.
@@ -17,6 +19,50 @@ export function notify(message) {
         title: 'Raindrop Bear',
         message: message || '',
         priority: 0,
+      },
+      () => {},
+    );
+  } catch (_) {}
+}
+
+/**
+ * Shows a success notification for a completed sync.
+ * @param {string} message
+ */
+export function notifySyncSuccess(message) {
+  try {
+    const iconUrl = chrome.runtime.getURL('icons/icon-128x128.png');
+    chrome.notifications?.create(
+      SYNC_SUCCESS_NOTIFICATION_ID,
+      {
+        type: 'basic',
+        iconUrl,
+        title: 'Raindrop Bear',
+        message: message || 'Sync completed successfully.',
+        priority: 0,
+      },
+      () => {},
+    );
+  } catch (_) {}
+}
+
+/**
+ * Shows a failure notification for a sync error.
+ * @param {string} message
+ */
+export function notifySyncFailure(message) {
+  try {
+    const iconUrl = chrome.runtime.getURL('icons/icon-128x128.png');
+    chrome.notifications?.create(
+      SYNC_FAILURE_NOTIFICATION_ID,
+      {
+        type: 'basic',
+        iconUrl,
+        title: 'Raindrop Bear: Sync failed',
+        message:
+          message ||
+          'An error occurred during sync. It will retry automatically.',
+        priority: 1,
       },
       () => {},
     );
