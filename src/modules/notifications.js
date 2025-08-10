@@ -14,7 +14,7 @@ export function notify(message) {
       {
         type: 'basic',
         iconUrl,
-        title: 'Raindrop Sync',
+        title: 'Raindrop Bear',
         message: message || '',
         priority: 0,
       },
@@ -40,7 +40,7 @@ export function notifyMissingOrInvalidToken(message) {
       {
         type: 'basic',
         iconUrl,
-        title: 'Raindrop Sync: Action required',
+        title: 'Raindrop Bear: Action required',
         message:
           message || 'Please configure your Raindrop API token in Options.',
         priority: 2,

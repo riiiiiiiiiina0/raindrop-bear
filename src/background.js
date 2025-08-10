@@ -1,4 +1,4 @@
-// Raindrop Sync Background Service Worker (Manifest V3)
+// Raindrop Bear Background Service Worker (Manifest V3)
 // Periodically sync Raindrop.io collections and bookmarks into Chrome bookmarks
 
 // ===== Configuration =====
