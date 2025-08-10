@@ -1,6 +1,6 @@
 import { chromeP } from './chrome.js';
 
-export const ROOT_FOLDER_NAME = 'Raindrop Bookmarks';
+export const ROOT_FOLDER_NAME = 'Raindrop';
 export const UNSORTED_COLLECTION_ID = -1;
 
 /**

@@ -1004,7 +1004,7 @@ async function performSync() {
 }
 
 // ===== Alarms and Lifecycle =====
-chrome.runtime.onInstalled.addListener(async () => {
+chrome.runtime.onInstalled.addListener(async (details) => {
   try {
     chrome.alarms.create(ALARM_NAME, { periodInMinutes: SYNC_PERIOD_MINUTES });
   } catch (_) {}
@@ -1012,18 +1012,31 @@ chrome.runtime.onInstalled.addListener(async () => {
   try {
     await removeLegacyTopFolders();
   } catch (_) {}
-  // Optionally run an initial sync shortly after install
-  setTimeout(() => {
-    performSync();
-  }, 3000);
+
+  if (details && details.reason === 'install') {
+    // If a token already exists (e.g., synced profile), kick off a sync immediately
+    try {
+      const data = await chromeP.storageGet('raindropApiToken');
+      const token = (
+        data && data.raindropApiToken ? String(data.raindropApiToken) : ''
+      ).trim();
+      if (token) {
+        RAINDROP_API_TOKEN = token;
+        performSync();
+      } else {
+        // Open Options page on first install
+        try {
+          chrome.runtime.openOptionsPage();
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
 });
 
 chrome.runtime.onStartup?.addListener(() => {
   try {
     chrome.alarms.create(ALARM_NAME, { periodInMinutes: SYNC_PERIOD_MINUTES });
   } catch (_) {}
-  // Cleanup legacy folders at startup as well
-  removeLegacyTopFolders().catch(() => {});
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -1041,7 +1054,15 @@ chrome.action?.onClicked.addListener(() => {
 // Listen for storage changes to update token immediately
 chrome.storage?.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes && changes.raindropApiToken) {
-    RAINDROP_API_TOKEN = changes.raindropApiToken.newValue || '';
+    const newToken = (changes.raindropApiToken.newValue || '').trim();
+    const oldToken = (changes.raindropApiToken.oldValue || '').trim();
+    RAINDROP_API_TOKEN = newToken;
+    if (newToken && newToken !== oldToken) {
+      // Token provided/updated → attempt immediate sync
+      try {
+        performSync();
+      } catch (_) {}
+    }
   }
 });
 
