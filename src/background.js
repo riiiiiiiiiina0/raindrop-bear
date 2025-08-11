@@ -1383,7 +1383,7 @@ async function performSync() {
   let didSucceed = false;
   let hasAnyChanges = false;
   // Show action badge during sync
-  setBadge('Sync', '#38bdf8'); // Tailwind sky-400
+  setBadge('🔄', '#38bdf8'); // Tailwind sky-400
   try {
     let state = await loadState();
     // If root folder missing (deleted by user), reset and treat as initial sync
@@ -1452,11 +1452,11 @@ async function performSync() {
     } catch (_) {}
     if (didSucceed) {
       // Success badge
-      setBadge('Done', '#22c55e'); // Tailwind green-500
+      setBadge('✔️', '#22c55e'); // Tailwind green-500
       scheduleClearBadge(3000);
     } else {
       // Failure badge
-      setBadge('Error', '#ef4444'); // Tailwind red-500
+      setBadge('😵', '#ef4444'); // Tailwind red-500
       scheduleClearBadge(3000);
     }
     if (didSucceed && notifyPref && hasAnyChanges) {
@@ -1531,6 +1531,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse({ ok: true });
         return;
       }
+      if (message && message.type === 'saveHighlightedTabsAsProject') {
+        const projectName = (message && message.name) || '';
+        await saveHighlightedTabsAsProject(projectName);
+        sendResponse({ ok: true });
+        return;
+      }
+      if (message && message.type === 'saveCurrentWindowAsProject') {
+        const projectName = (message && message.name) || '';
+        await saveCurrentWindowAsProject(projectName);
+        sendResponse({ ok: true });
+        return;
+      }
     } catch (_) {
       sendResponse({ ok: false });
     }
@@ -1544,7 +1556,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
  */
 async function saveCurrentOrHighlightedTabsToRaindrop() {
   // Show badge
-  setBadge('Saving', '#f59e0b'); // amber-500
+  setBadge('⬆️', '#f59e0b'); // amber-500
   let titlesAndUrls = [];
   try {
     const tabs = await new Promise((resolve) =>
@@ -1629,7 +1641,7 @@ async function saveCurrentOrHighlightedTabsToRaindrop() {
     } catch (_) {}
 
     if (successCount > 0) {
-      setBadge('Saved', '#22c55e'); // green-500
+      setBadge('✔️', '#22c55e'); // green-500
       scheduleClearBadge(3000);
       try {
         notify(
@@ -1639,17 +1651,206 @@ async function saveCurrentOrHighlightedTabsToRaindrop() {
         );
       } catch (_) {}
     } else {
-      setBadge('Error', '#ef4444');
+      setBadge('😵', '#ef4444');
       scheduleClearBadge(3000);
       try {
         notify('Failed to save tab(s) to Raindrop');
       } catch (_) {}
     }
   } catch (err) {
-    setBadge('Error', '#ef4444');
+    setBadge('😵', '#ef4444');
     scheduleClearBadge(3000);
     try {
       notify('Failed to save tab(s) to Raindrop');
+    } catch (_) {}
+  }
+}
+
+/**
+ * Save highlighted tabs, or entire current window when none highlighted,
+ * into Raindrop under a group named "Saved Projects" as a new root collection
+ * using the provided projectName.
+ *
+ * Each tab is saved with formatted title:
+ * - If in a tab group: "[<groupIndex>] <groupTitle> / <indexInGroup> <tabTitle>"
+ * - Else: "<indexInWindow> <tabTitle>"
+ *
+ * @param {string} projectName
+ */
+async function saveHighlightedTabsAsProject(projectName) {
+  const name = String(projectName || '').trim();
+  if (!name) return;
+
+  // Gather highlighted; if none later, fallback handled in helper
+  let /** @type {chrome.tabs.Tab[]} */ tabsList = await new Promise((resolve) =>
+      chrome.tabs.query(
+        { windowId: chrome.windows.WINDOW_ID_CURRENT, highlighted: true },
+        (ts) => resolve(ts || []),
+      ),
+    );
+  await saveTabsListAsProject(name, tabsList || []);
+}
+
+/**
+ * Save all tabs in the current window as a project with the provided name.
+ * @param {string} projectName
+ */
+async function saveCurrentWindowAsProject(projectName) {
+  const name = String(projectName || '').trim();
+  if (!name) return;
+  const tabsList = await new Promise((resolve) =>
+    chrome.tabs.query({ windowId: chrome.windows.WINDOW_ID_CURRENT }, (ts) =>
+      resolve(ts || []),
+    ),
+  );
+  await saveTabsListAsProject(name, tabsList || []);
+}
+
+/**
+ * Internal helper to persist a list of tabs into a new project collection under
+ * the "Saved Projects" group. Handles grouping, collection creation and bulk save.
+ * @param {string} name
+ * @param {chrome.tabs.Tab[]} tabsList
+ */
+async function saveTabsListAsProject(name, tabsList) {
+  setBadge('💾', '#a855f7');
+  try {
+    // Filter http(s)
+    const eligibleTabs = (tabsList || []).filter(
+      (t) =>
+        t.url && (t.url.startsWith('https://') || t.url.startsWith('http://')),
+    );
+    if (!eligibleTabs.length) throw new Error('No eligible tabs');
+
+    // Compute formatted titles with tab group context
+    const /** @type {chrome.tabGroups.TabGroup[]} */ groupsInWindow =
+        await new Promise((resolve) =>
+          chrome.tabGroups?.query(
+            { windowId: chrome.windows.WINDOW_ID_CURRENT },
+            (gs) => resolve(gs || []),
+          ),
+        );
+    const /** @type {Map<number, chrome.tabGroups.TabGroup>} */ groupIdToMeta =
+        new Map();
+    (groupsInWindow || []).slice().forEach((g) => {
+      groupIdToMeta.set(g.id, g);
+    });
+
+    const items = eligibleTabs.map((t, i) => {
+      const baseTitle = t.title || t.url || '';
+      const group = groupIdToMeta.get(t.groupId) || null;
+      const meta = {
+        index: i,
+        pinned: t.pinned,
+        tabGroup: group && group.title,
+        tabGroupColor: group && group.color,
+      };
+      return {
+        link: t.url,
+        title: baseTitle,
+        note: JSON.stringify(meta),
+      };
+    });
+
+    // Ensure "Saved Projects" group exists and create project root collection under it
+    const userRes = await apiGET('/user');
+    const groups =
+      userRes && userRes.user && Array.isArray(userRes.user.groups)
+        ? userRes.user.groups
+        : [];
+    const savedProjectsTitle = 'Saved Projects';
+    let groupsArray = groups.slice();
+    let groupIndex = groupsArray.findIndex(
+      (g) => (g.title || '') === savedProjectsTitle,
+    );
+    if (groupIndex === -1) {
+      groupsArray = groupsArray.concat({
+        title: savedProjectsTitle,
+        hidden: false,
+        sort: groupsArray.length,
+        collections: [],
+      });
+      try {
+        await apiPUT('/user', { groups: groupsArray });
+      } catch (_) {}
+      // refetch just to be safe
+      try {
+        const uu = await apiGET('/user');
+        groupsArray =
+          uu && uu.user && Array.isArray(uu.user.groups)
+            ? uu.user.groups
+            : groupsArray;
+      } catch (_) {}
+      groupIndex = groupsArray.findIndex(
+        (g) => (g.title || '') === savedProjectsTitle,
+      );
+    }
+
+    // Create root collection for project
+    const created = await apiPOST('/collection', { title: name });
+    const createdItem = created && (created.item || created.data || created);
+    const projectCollectionId =
+      createdItem && (createdItem._id ?? createdItem.id);
+    if (projectCollectionId == null)
+      throw new Error('Failed to create collection');
+
+    // Add to Saved Projects group list in correct position (append)
+    try {
+      const newGroups = groupsArray.slice();
+      const entry = {
+        ...(newGroups[groupIndex] || {
+          title: savedProjectsTitle,
+          collections: [],
+        }),
+      };
+      const cols = Array.isArray(entry.collections)
+        ? entry.collections.slice()
+        : [];
+      cols.push(projectCollectionId);
+      entry.collections = cols;
+      newGroups[groupIndex] = entry;
+      await apiPUT('/user', { groups: newGroups });
+    } catch (_) {}
+
+    // Bulk save items into that collection
+    const body = {
+      items: items.map((it) => ({
+        link: it.link,
+        title: it.title,
+        note: it.note,
+        collection: { $id: Number(projectCollectionId) },
+      })),
+    };
+    try {
+      await apiPOST('/raindrops', body);
+    } catch (_) {
+      // fallback individual if bulk fails
+      for (const it of items) {
+        try {
+          await apiPOST('/raindrop', {
+            link: it.link,
+            title: it.title,
+            note: it.note,
+            collection: { $id: Number(projectCollectionId) },
+          });
+        } catch (_) {}
+      }
+    }
+
+    setBadge('✔️', '#22c55e');
+    scheduleClearBadge(3000);
+    try {
+      notify(
+        `Saved ${items.length} tab${
+          items.length > 1 ? 's' : ''
+        } to ${savedProjectsTitle}/${name}`,
+      );
+    } catch (_) {}
+  } catch (e) {
+    setBadge('😵', '#ef4444');
+    scheduleClearBadge(3000);
+    try {
+      notify(`Failed to save project: ${e}`);
     } catch (_) {}
   }
 }

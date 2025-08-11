@@ -5,6 +5,7 @@
   "description": "One job, done cute: sync your Raindrop.io collections and bookmarks into your browser’s bookmarks — across devices.",
   "permissions": [
     "tabs",
+    "tabGroups",
     "bookmarks",
     "storage",
     "unlimitedStorage",
