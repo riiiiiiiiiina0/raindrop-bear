@@ -80,8 +80,7 @@ export async function removeLegacyTopFolders() {
     const barId = await getBookmarksBarFolderId();
     const children = await chromeP.bookmarksGetChildren(barId);
     const toRemove = (children || []).filter(
-      (c) =>
-        c && !c.url && (c.title === 'Raindrop' || c.title === 'Raindrop Sync'),
+      (c) => c && !c.url && c.title === 'Raindrop Sync',
     );
     for (const node of toRemove) {
       try {

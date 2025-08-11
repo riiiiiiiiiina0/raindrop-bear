@@ -7,6 +7,8 @@ import {
   setApiToken as setRaindropToken,
   loadTokenIfNeeded,
   apiPOST as raindropPOST,
+  apiPUT as raindropPUT,
+  apiDELETE as raindropDELETE,
 } from './modules/raindrop.js';
 // API token is loaded from storage (set via Options page)
 let RAINDROP_API_TOKEN = '';
@@ -42,6 +44,7 @@ import {
 
 // Concurrency guard (service worker scope)
 let isSyncing = false;
+let suppressLocalBookmarkEvents = false; // guard to avoid feedback loops for local→remote during extension-initiated changes
 
 import { chromeP } from './modules/chrome.js';
 
@@ -125,6 +128,87 @@ async function apiGET(pathWithQuery) {
   try {
     setRaindropToken(RAINDROP_API_TOKEN);
     return await raindropGET(pathWithQuery);
+  } catch (err) {
+    if (err && (err.status === 401 || err.status === 403)) {
+      notifyMissingOrInvalidToken(
+        'Invalid API token. Please update your Raindrop API token.',
+      );
+    }
+    throw err;
+  }
+}
+
+async function apiPOST(path, body) {
+  if (!RAINDROP_API_TOKEN) {
+    try {
+      const data = await chromeP.storageGet('raindropApiToken');
+      RAINDROP_API_TOKEN =
+        data && data.raindropApiToken ? data.raindropApiToken : '';
+    } catch (_) {}
+  }
+  if (!RAINDROP_API_TOKEN) {
+    notifyMissingOrInvalidToken(
+      'No API token configured. Please add your Raindrop API token.',
+    );
+    throw new Error('Missing Raindrop API token');
+  }
+  try {
+    setRaindropToken(RAINDROP_API_TOKEN);
+    return await raindropPOST(path, body);
+  } catch (err) {
+    if (err && (err.status === 401 || err.status === 403)) {
+      notifyMissingOrInvalidToken(
+        'Invalid API token. Please update your Raindrop API token.',
+      );
+    }
+    throw err;
+  }
+}
+
+async function apiPUT(path, body) {
+  if (!RAINDROP_API_TOKEN) {
+    try {
+      const data = await chromeP.storageGet('raindropApiToken');
+      RAINDROP_API_TOKEN =
+        data && data.raindropApiToken ? data.raindropApiToken : '';
+    } catch (_) {}
+  }
+  if (!RAINDROP_API_TOKEN) {
+    notifyMissingOrInvalidToken(
+      'No API token configured. Please add your Raindrop API token.',
+    );
+    throw new Error('Missing Raindrop API token');
+  }
+  try {
+    setRaindropToken(RAINDROP_API_TOKEN);
+    return await raindropPUT(path, body);
+  } catch (err) {
+    if (err && (err.status === 401 || err.status === 403)) {
+      notifyMissingOrInvalidToken(
+        'Invalid API token. Please update your Raindrop API token.',
+      );
+    }
+    throw err;
+  }
+}
+
+async function apiDELETE(path) {
+  if (!RAINDROP_API_TOKEN) {
+    try {
+      const data = await chromeP.storageGet('raindropApiToken');
+      RAINDROP_API_TOKEN =
+        data && data.raindropApiToken ? data.raindropApiToken : '';
+    } catch (_) {}
+  }
+  if (!RAINDROP_API_TOKEN) {
+    notifyMissingOrInvalidToken(
+      'No API token configured. Please add your Raindrop API token.',
+    );
+    throw new Error('Missing Raindrop API token');
+  }
+  try {
+    setRaindropToken(RAINDROP_API_TOKEN);
+    return await raindropDELETE(path);
   } catch (err) {
     if (err && (err.status === 401 || err.status === 403)) {
       notifyMissingOrInvalidToken(
@@ -993,6 +1077,266 @@ async function ensureRootAndMaybeReset(state) {
   return { didReset: true, rootFolderId: newRootId, state: clearedState };
 }
 
+// ===== Helpers for bi-directional sync =====
+function invertRecord(record) {
+  const inverted = {};
+  for (const [k, v] of Object.entries(record || {})) {
+    if (v != null) inverted[String(v)] = String(k);
+  }
+  return inverted; // value -> key
+}
+
+async function getAncestorIds(nodeId) {
+  const ids = [];
+  let currentId = nodeId;
+  const visited = new Set();
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    ids.push(String(currentId));
+    try {
+      const nodes = await chromeP.bookmarksGet(String(currentId));
+      const node = nodes && nodes[0];
+      if (!node || !node.parentId) break;
+      currentId = node.parentId;
+    } catch (_) {
+      break;
+    }
+  }
+  return ids; // from node up to root
+}
+
+async function isUnderManagedRoot(nodeId, rootFolderId) {
+  if (!nodeId || !rootFolderId) return false;
+  const ancestors = await getAncestorIds(nodeId);
+  return ancestors.includes(String(rootFolderId));
+}
+
+async function resolveParentCollectionId(parentFolderId, state) {
+  const collectionMap = state.collectionMap || {};
+  const groupMap = state.groupMap || {};
+  const collectionByFolder = invertRecord(collectionMap); // chromeFolderId -> raindropCollectionId
+  const unsortedFolderId = collectionMap[String(UNSORTED_COLLECTION_ID)] || '';
+  // Parent is a collection folder → return its collection id
+  const mapped = collectionByFolder[String(parentFolderId)];
+  if (mapped != null && mapped !== '') return Number(mapped);
+  // Parent is Unsorted → treat as root/no parent for folders, -1 for items (handled by caller)
+  if (String(parentFolderId) === String(unsortedFolderId)) return null;
+  // Parent is a group folder or the root folder → root collection (no parent)
+  for (const id of Object.values(groupMap || {})) {
+    if (String(id) === String(parentFolderId)) return null;
+  }
+  if (String(parentFolderId) === String(state.rootFolderId || '')) return null;
+  return null;
+}
+
+// ===== Local → Raindrop event mirroring =====
+chrome.bookmarks?.onCreated.addListener(async (id, node) => {
+  try {
+    if (isSyncing || suppressLocalBookmarkEvents) return;
+    const state = await loadState();
+    const rootFolderId = state.rootFolderId;
+    if (!rootFolderId) return;
+    // Only mirror changes under our managed root tree
+    const underRoot = await isUnderManagedRoot(node.parentId, rootFolderId);
+    if (!underRoot) return;
+
+    const collectionMap = { ...(state.collectionMap || {}) };
+    const collectionByFolder = invertRecord(collectionMap);
+    const unsortedFolderId =
+      collectionMap[String(UNSORTED_COLLECTION_ID)] || '';
+
+    if (node.url) {
+      // Bookmark created → create raindrop
+      let collectionId = null;
+      if (String(node.parentId) === String(unsortedFolderId)) {
+        collectionId = UNSORTED_COLLECTION_ID;
+      } else {
+        const mapped = collectionByFolder[String(node.parentId)];
+        collectionId = mapped != null ? Number(mapped) : UNSORTED_COLLECTION_ID;
+      }
+      const body = {
+        link: node.url,
+        title: node.title || node.url,
+        collection: { $id: collectionId },
+      };
+      try {
+        const res = await apiPOST('/raindrop', body);
+        const item = res && (res.item || res.data || res);
+        const newId =
+          item && (item._id != null ? String(item._id) : String(item.id || ''));
+        if (newId) {
+          const itemMap = { ...(state.itemMap || {}) };
+          itemMap[newId] = String(id);
+          await saveState({ itemMap });
+        }
+      } catch (_) {}
+    } else {
+      // Folder created → create raindrop collection
+      const parentCollectionId = await resolveParentCollectionId(
+        node.parentId,
+        state,
+      );
+      const body =
+        parentCollectionId == null
+          ? { title: node.title || '' }
+          : { title: node.title || '', parent: { $id: parentCollectionId } };
+      try {
+        const res = await apiPOST('/collection', body);
+        const created = res && (res.item || res.data || res);
+        const colId =
+          created &&
+          (created._id != null
+            ? String(created._id)
+            : String(created.id || ''));
+        if (colId) {
+          const newCollectionMap = { ...(state.collectionMap || {}) };
+          newCollectionMap[colId] = String(id);
+          await saveState({ collectionMap: newCollectionMap });
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+});
+
+chrome.bookmarks?.onRemoved.addListener(async (id, removeInfo) => {
+  try {
+    if (isSyncing || suppressLocalBookmarkEvents) return;
+    const state = await loadState();
+    // If our managed root folder is missing, skip mirroring deletions (likely user removed the whole tree)
+    if (state.rootFolderId) {
+      try {
+        const nodes = await chromeP.bookmarksGet(String(state.rootFolderId));
+        if (!nodes || nodes.length === 0) return; // root missing → do not propagate deletions to cloud
+      } catch (_) {
+        return;
+      }
+    }
+    const itemMap = { ...(state.itemMap || {}) };
+    const collectionMap = { ...(state.collectionMap || {}) };
+    const itemByLocal = invertRecord(itemMap); // chromeId -> raindropId
+    const collectionByLocal = invertRecord(collectionMap); // folderId -> collectionId
+
+    if (itemByLocal[String(id)]) {
+      const raindropId = itemByLocal[String(id)];
+      try {
+        await apiDELETE(`/raindrop/${encodeURIComponent(raindropId)}`);
+      } catch (_) {}
+      delete itemMap[String(raindropId)];
+      await saveState({ itemMap });
+      return;
+    }
+    if (collectionByLocal[String(id)]) {
+      const collectionId = collectionByLocal[String(id)];
+      try {
+        await apiDELETE(`/collection/${encodeURIComponent(collectionId)}`);
+      } catch (_) {}
+      delete collectionMap[String(collectionId)];
+      await saveState({ collectionMap });
+    }
+  } catch (_) {}
+});
+
+chrome.bookmarks?.onChanged.addListener(async (id, changeInfo) => {
+  try {
+    if (isSyncing || suppressLocalBookmarkEvents) return;
+    const state = await loadState();
+    const itemMap = { ...(state.itemMap || {}) };
+    const collectionMap = { ...(state.collectionMap || {}) };
+    const itemByLocal = invertRecord(itemMap);
+    const collectionByLocal = invertRecord(collectionMap);
+
+    if (itemByLocal[String(id)]) {
+      const raindropId = itemByLocal[String(id)];
+      const body = {};
+      if (typeof changeInfo.title === 'string')
+        body['title'] = changeInfo.title;
+      if (typeof changeInfo.url === 'string') body['link'] = changeInfo.url;
+      if (Object.keys(body).length > 0) {
+        try {
+          await apiPUT(`/raindrop/${encodeURIComponent(raindropId)}`, body);
+        } catch (_) {}
+      }
+      return;
+    }
+    if (collectionByLocal[String(id)]) {
+      const collectionId = collectionByLocal[String(id)];
+      if (typeof changeInfo.title === 'string') {
+        try {
+          await apiPUT(`/collection/${encodeURIComponent(collectionId)}`, {
+            title: changeInfo.title,
+          });
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
+});
+
+chrome.bookmarks?.onMoved.addListener(async (id, moveInfo) => {
+  try {
+    if (isSyncing || suppressLocalBookmarkEvents) return;
+    const state = await loadState();
+    const rootFolderId = state.rootFolderId;
+    if (!rootFolderId) return;
+    // Only mirror if moved within our managed root tree
+    const underRoot = await isUnderManagedRoot(moveInfo.parentId, rootFolderId);
+    if (!underRoot) return;
+
+    const itemMap = { ...(state.itemMap || {}) };
+    const collectionMap = { ...(state.collectionMap || {}) };
+    const groupMap = { ...(state.groupMap || {}) };
+    const itemByLocal = invertRecord(itemMap);
+    const collectionByLocal = invertRecord(collectionMap);
+    const unsortedFolderId =
+      collectionMap[String(UNSORTED_COLLECTION_ID)] || '';
+
+    if (itemByLocal[String(id)]) {
+      // Bookmark moved → update item's collection
+      const raindropId = itemByLocal[String(id)];
+      let newCollectionId = null;
+      if (String(moveInfo.parentId) === String(unsortedFolderId)) {
+        newCollectionId = UNSORTED_COLLECTION_ID;
+      } else {
+        const mapped = collectionByLocal[String(moveInfo.parentId)];
+        newCollectionId =
+          mapped != null ? Number(mapped) : UNSORTED_COLLECTION_ID;
+      }
+      try {
+        await apiPUT(`/raindrop/${encodeURIComponent(raindropId)}`, {
+          collection: { $id: newCollectionId },
+        });
+      } catch (_) {}
+      return;
+    }
+
+    if (collectionByLocal[String(id)]) {
+      // Folder moved → update collection parent
+      const collectionId = collectionByLocal[String(id)];
+      let parentCollectionId = null;
+      const isParentGroup = Object.values(groupMap).some(
+        (gid) => String(gid) === String(moveInfo.parentId),
+      );
+      const isParentRoot = String(moveInfo.parentId) === String(rootFolderId);
+      if (
+        isParentGroup ||
+        isParentRoot ||
+        String(moveInfo.parentId) === String(unsortedFolderId)
+      ) {
+        parentCollectionId = null; // move to root
+      } else {
+        const mapped = collectionByLocal[String(moveInfo.parentId)];
+        parentCollectionId = mapped != null ? Number(mapped) : null;
+      }
+      const body =
+        parentCollectionId == null
+          ? { parent: null }
+          : { parent: { $id: parentCollectionId } };
+      try {
+        await apiPUT(`/collection/${encodeURIComponent(collectionId)}`, body);
+      } catch (_) {}
+    }
+  } catch (_) {}
+});
+
 // ===== Core Sync =====
 /**
  * Orchestrates a full sync run:
@@ -1009,6 +1353,7 @@ async function ensureRootAndMaybeReset(state) {
 async function performSync() {
   if (isSyncing) return;
   isSyncing = true;
+  suppressLocalBookmarkEvents = true;
   // Read user preference (default ON)
   let notifyPref = true;
   try {
@@ -1082,6 +1427,7 @@ async function performSync() {
       } catch (_) {}
     }
   } finally {
+    suppressLocalBookmarkEvents = false;
     isSyncing = false;
     // Force refresh of badge text to avoid stale "Sync" lingering in some cases
     try {
@@ -1240,16 +1586,21 @@ async function saveCurrentOrHighlightedTabsToRaindrop() {
     }));
     // Merge mappings so future sync recognizes these new items
     const mergedItemMap = { ...((state && state.itemMap) || {}) };
-    for (const { id, title, url } of toCreateLocally.slice().reverse()) {
-      try {
-        const node = await chromeP.bookmarksCreate({
-          parentId: unsortedFolderId,
-          title: title || url,
-          url,
-          index: 0,
-        });
-        if (id) mergedItemMap[id] = node.id;
-      } catch (_) {}
+    suppressLocalBookmarkEvents = true;
+    try {
+      for (const { id, title, url } of toCreateLocally.slice().reverse()) {
+        try {
+          const node = await chromeP.bookmarksCreate({
+            parentId: unsortedFolderId,
+            title: title || url,
+            url,
+            index: 0,
+          });
+          if (id) mergedItemMap[id] = node.id;
+        } catch (_) {}
+      }
+    } finally {
+      suppressLocalBookmarkEvents = false;
     }
     try {
       await saveState({ itemMap: mergedItemMap });
