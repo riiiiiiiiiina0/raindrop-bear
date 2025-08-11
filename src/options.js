@@ -24,6 +24,12 @@
   const actionDoubleEl = /** @type {HTMLSelectElement|null} */ (
     document.getElementById('action-double')
   );
+  const tabsSyncEnabledEl = /** @type {HTMLInputElement|null} */ (
+    document.getElementById('tabs-sync-enabled')
+  );
+  const tabsGroupTitleEl = /** @type {HTMLInputElement|null} */ (
+    document.getElementById('tabs-group-title')
+  );
 
   if (
     !(formEl instanceof HTMLFormElement) ||
@@ -33,7 +39,9 @@
     !(notifyEl instanceof HTMLInputElement) ||
     !(notifyStatusEl instanceof HTMLSpanElement) ||
     !(actionSingleEl instanceof HTMLSelectElement) ||
-    !(actionDoubleEl instanceof HTMLSelectElement)
+    !(actionDoubleEl instanceof HTMLSelectElement) ||
+    !(tabsSyncEnabledEl instanceof HTMLInputElement) ||
+    !(tabsGroupTitleEl instanceof HTMLInputElement)
   ) {
     // DOM not ready; abort quietly
     return;
@@ -48,14 +56,16 @@
           'actionSingle',
           'actionDouble',
           'actionBehavior',
+          'tabsSyncEnabled',
+          'tabsGroupTitle',
         ],
         (data) => {
           if (tokenEl) tokenEl.value = (data && data.raindropApiToken) || '';
-          const enabled =
+          const notifyEnabled =
             data && typeof data.notifyOnSync === 'boolean'
               ? data.notifyOnSync
               : true; // default ON
-          if (notifyEl) notifyEl.checked = !!enabled;
+          if (notifyEl) notifyEl.checked = !!notifyEnabled;
           const single =
             (data && data.actionSingle) ||
             (data && data.actionBehavior) ||
@@ -63,6 +73,15 @@
           const double = (data && data.actionDouble) || 'save';
           if (actionSingleEl) actionSingleEl.value = single;
           if (actionDoubleEl) actionDoubleEl.value = double;
+
+          // Tabs sync
+          const tabsSyncEnabled =
+            data && typeof data.tabsSyncEnabled === 'boolean'
+              ? data.tabsSyncEnabled
+              : true; // default ON
+          if (tabsSyncEnabledEl) tabsSyncEnabledEl.checked = !!tabsSyncEnabled;
+          if (tabsGroupTitleEl)
+            tabsGroupTitleEl.value = (data && data.tabsGroupTitle) || '';
         },
       );
     } catch (_) {}
@@ -169,5 +188,50 @@
         });
       } catch (_) {}
     });
+
+  // tabs sync enabled: save immediately
+  if (tabsSyncEnabledEl)
+    tabsSyncEnabledEl.addEventListener('change', () => {
+      const value = !!tabsSyncEnabledEl.checked;
+      try {
+        chrome.storage.local.set({ tabsSyncEnabled: value }, () => {
+          try {
+            /** @type {any} */ (window)
+              .Toastify({
+                text: '📑 Tabs Sync preference saved',
+                duration: 3000,
+                position: 'right',
+                style: { background: '#3b82f6' },
+              })
+              .showToast();
+          } catch (_) {}
+        });
+      } catch (_) {}
+    });
+
+  // tabs group title: save with debounce
+  let groupTitleTimeout;
+  if (tabsGroupTitleEl)
+    tabsGroupTitleEl.addEventListener('input', () => {
+      clearTimeout(groupTitleTimeout);
+      groupTitleTimeout = setTimeout(() => {
+        const value = tabsGroupTitleEl.value.trim();
+        try {
+          chrome.storage.local.set({ tabsGroupTitle: value }, () => {
+            try {
+              /** @type {any} */ (window)
+                .Toastify({
+                  text: '📑 Tabs Group Title saved',
+                  duration: 3000,
+                  position: 'right',
+                  style: { background: '#3b82f6' },
+                })
+                .showToast();
+            } catch (_) {}
+          });
+        } catch (_) {}
+      }, 500);
+    });
+
   load();
 })();

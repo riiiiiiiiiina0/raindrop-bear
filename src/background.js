@@ -31,6 +31,12 @@ const STORAGE_KEYS = {
   groupMap: 'groupMap', // { [groupTitle: string]: chromeFolderId: string }
   itemMap: 'itemMap', // { [raindropItemId: string]: chromeBookmarkId: string }
   rootFolderId: 'rootFolderId', // chrome folder id for the Raindrop root
+  tabsSyncEnabled: 'tabsSyncEnabled',
+  tabsGroupTitle: 'tabsGroupTitle',
+  tabsWindowMap: 'tabsWindowMap',
+  tabsGroupCollectionMap: 'tabsGroupCollectionMap',
+  tabsItemMap: 'tabsItemMap',
+  tabsLastSync: 'tabsLastSync',
 };
 
 import {
@@ -47,6 +53,14 @@ let isSyncing = false;
 let suppressLocalBookmarkEvents = false; // guard to avoid feedback loops for local→remote during extension-initiated changes
 
 import { chromeP } from './modules/chrome.js';
+
+import {
+  loadTabsConfig,
+  mirrorBrowserToCloud,
+  fetchTabsCloudModel,
+  applyCloudToBrowser,
+  readBrowserModel,
+} from './modules/tabsSync.js';
 
 // ===== Types =====
 
@@ -1350,6 +1364,27 @@ chrome.bookmarks?.onMoved.addListener(async (id, moveInfo) => {
  * Concurrency is guarded by `isSyncing`.
  * @returns {Promise<void>}
  */
+async function performTabsSync() {
+  const { enabled, groupTitle } = await loadTabsConfig();
+  if (!enabled) {
+    return;
+  }
+
+  try {
+    // This is a placeholder for the full implementation.
+    // The real implementation will be built in subsequent steps.
+    console.log(`Starting tabs sync for group: "${groupTitle}"`);
+    const cloudModel = await fetchTabsCloudModel(groupTitle);
+    await applyCloudToBrowser(cloudModel);
+    const browserModel = await readBrowserModel();
+    // For now, we are not mirroring back to the cloud, just logging.
+    console.log('Browser model:', browserModel);
+  } catch (err) {
+    console.error('Tab sync failed:', err);
+    // Optionally notify user of tab sync failure
+  }
+}
+
 async function performSync() {
   if (isSyncing) return;
   isSyncing = true;
@@ -1380,6 +1415,11 @@ async function performSync() {
     // 1) Fetch groups and collections
     const { groups, rootCollections, childCollections } =
       await fetchGroupsAndCollections();
+
+    // Exclude the tabs sync group from bookmark processing
+    const { groupTitle: tabsGroupTitle } = await loadTabsConfig();
+    const bookmarkGroups = groups.filter(g => g.title !== tabsGroupTitle);
+
     const collectionsById = buildCollectionsIndex(
       rootCollections,
       childCollections,
@@ -1387,7 +1427,7 @@ async function performSync() {
 
     // 2) Sync folders (groups + collections)
     const { collectionMap, didChange: foldersChanged } = await syncFolders(
-      groups,
+      bookmarkGroups,
       collectionsById,
       state,
     );
@@ -1407,12 +1447,16 @@ async function performSync() {
 
     hasAnyChanges = Boolean(foldersChanged || itemsChanged || deletionsChanged);
 
-    // 5) Persist state
+    // 5) Persist state for bookmarks
     await saveState({
       lastSync: newLastSyncISO,
       collectionMap,
       itemMap: prunedItemMap,
     });
+
+    // 6) Perform Tabs Sync
+    await performTabsSync();
+
     didSucceed = true;
   } catch (err) {
     // Log but do not throw; next alarm will retry
@@ -1774,4 +1818,52 @@ chrome.notifications?.onClicked.addListener((notificationId) => {
       } catch (_) {}
     })();
   }
+});
+
+// ===== Tab Sync Event Mirroring (Browser → Cloud) =====
+// Note: These listeners call a placeholder function for now.
+// The actual implementation will be in `tabsSync.js`.
+
+chrome.windows?.onCreated.addListener((window) => {
+  mirrorBrowserToCloud({ event: 'window.onCreated', window });
+});
+
+chrome.tabs?.onCreated.addListener((tab) => {
+  mirrorBrowserToCloud({ event: 'tab.onCreated', tab });
+});
+
+chrome.tabs?.onRemoved.addListener((tabId, removeInfo) => {
+  mirrorBrowserToCloud({ event: 'tab.onRemoved', tabId, removeInfo });
+});
+
+chrome.tabs?.onUpdated.addListener((tabId, changeInfo, tab) => {
+  mirrorBrowserToCloud({ event: 'tab.onUpdated', tabId, changeInfo, tab });
+});
+
+chrome.tabs?.onMoved.addListener((tabId, moveInfo) => {
+  mirrorBrowserToCloud({ event: 'tab.onMoved', tabId, moveInfo });
+});
+
+chrome.tabs?.onAttached.addListener((tabId, attachInfo) => {
+  mirrorBrowserToCloud({ event: 'tab.onAttached', tabId, attachInfo });
+});
+
+chrome.tabs?.onDetached.addListener((tabId, detachInfo) => {
+  mirrorBrowserToCloud({ event: 'tab.onDetached', tabId, detachInfo });
+});
+
+chrome.tabGroups?.onCreated.addListener((group) => {
+  mirrorBrowserToCloud({ event: 'tabGroup.onCreated', group });
+});
+
+chrome.tabGroups?.onRemoved.addListener((group) => {
+  mirrorBrowserToCloud({ event: 'tabGroup.onRemoved', group });
+});
+
+chrome.tabGroups?.onUpdated.addListener((group) => {
+  mirrorBrowserToCloud({ event: 'tabGroup.onUpdated', group });
+});
+
+chrome.tabGroups?.onMoved.addListener((group) => {
+  mirrorBrowserToCloud({ event: 'tabGroup.onMoved', group });
 });
