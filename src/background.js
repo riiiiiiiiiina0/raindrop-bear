@@ -1459,6 +1459,10 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   try {
     await removeLegacyTopFolders();
   } catch (_) {}
+  // Reflect current configured actions in tooltip
+  try {
+    await updateActionTitle();
+  } catch (_) {}
 
   if (details && details.reason === 'install') {
     // If a token already exists (e.g., synced profile), kick off a sync immediately
@@ -1483,6 +1487,10 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.runtime.onStartup?.addListener(() => {
   try {
     chrome.alarms.create(ALARM_NAME, { periodInMinutes: SYNC_PERIOD_MINUTES });
+  } catch (_) {}
+  // Update tooltip on browser startup
+  try {
+    updateActionTitle();
   } catch (_) {}
 });
 
@@ -1537,6 +1545,33 @@ async function performActionBehavior(behavior) {
       await performSync();
     } catch (_) {}
   }
+}
+
+function behaviorLabel(behavior) {
+  switch (behavior) {
+    case 'sync':
+      return 'Sync';
+    case 'save':
+      return 'Save to Raindrop';
+    case 'options':
+      return 'Open Options';
+    case 'none':
+      return 'Do nothing';
+    default:
+      return 'Sync';
+  }
+}
+
+async function updateActionTitle() {
+  try {
+    const { single, double } = await getActionPreferences();
+    const title = `Click: ${behaviorLabel(
+      single,
+    )}; Double-click: ${behaviorLabel(double)}`;
+    try {
+      chrome.action?.setTitle({ title });
+    } catch (_) {}
+  } catch (_) {}
 }
 
 chrome.action?.onClicked.addListener(async () => {
@@ -1696,6 +1731,15 @@ chrome.storage?.onChanged.addListener((changes, area) => {
         performSync();
       } catch (_) {}
     }
+  }
+  if (
+    area === 'local' &&
+    changes &&
+    (changes.actionSingle || changes.actionDouble || changes.actionBehavior)
+  ) {
+    try {
+      updateActionTitle();
+    } catch (_) {}
   }
 });
 
