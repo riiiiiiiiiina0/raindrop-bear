@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Raindrop Bear — Popup</title>
+  <script src="../libs/tailwindcss@4.js"></script>
+  <link rel="icon" href="../icons/icon-32x32.png" />
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+
+    body {
+      width: 280px;
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 antialiased">
+  <main class="p-4">
+    <div class="flex items-center gap-3 mb-4">
+      <img src="../icons/icon-32x32.png" alt="" class="h-6 w-6 rounded" />
+      <h1 class="text-base font-semibold">Raindrop Bear</h1>
+    </div>
+
+    <div class="flex flex-col gap-3">
+      <button id="sync-btn"
+        class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
+        Sync bookmarks
+      </button>
+      <button id="save-btn"
+        class="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60">
+        Save
+      </button>
+    </div>
+
+    <p id="status" class="text-xs mt-3 text-gray-600 dark:text-gray-400"></p>
+  </main>
+
+  <script src="./popup.js"></script>
+</body>
+
+</html>

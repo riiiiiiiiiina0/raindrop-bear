@@ -45,6 +45,19 @@ import {
 // Concurrency guard (service worker scope)
 let isSyncing = false;
 let suppressLocalBookmarkEvents = false; // guard to avoid feedback loops for local→remote during extension-initiated changes
+// Track URLs we just created remotely (via bulk save) to prevent mirroring duplicates
+const recentlyCreatedRemoteUrls = new Set();
+function rememberRecentlyCreatedRemoteUrls(urls, ttlMs = 120000) {
+  for (const url of urls || []) {
+    if (!url) continue;
+    recentlyCreatedRemoteUrls.add(String(url));
+    setTimeout(() => {
+      try {
+        recentlyCreatedRemoteUrls.delete(String(url));
+      } catch (_) {}
+    }, Math.max(1000, Number(ttlMs) || 120000));
+  }
+}
 
 import { chromeP } from './modules/chrome.js';
 
@@ -1133,6 +1146,10 @@ async function resolveParentCollectionId(parentFolderId, state) {
 chrome.bookmarks?.onCreated.addListener(async (id, node) => {
   try {
     if (isSyncing || suppressLocalBookmarkEvents) return;
+    // If this bookmark was just created locally as a result of our own remote save, skip mirroring
+    if (node && node.url && recentlyCreatedRemoteUrls.has(String(node.url))) {
+      return;
+    }
     const state = await loadState();
     const rootFolderId = state.rootFolderId;
     if (!rootFolderId) return;
@@ -1146,7 +1163,7 @@ chrome.bookmarks?.onCreated.addListener(async (id, node) => {
       collectionMap[String(UNSORTED_COLLECTION_ID)] || '';
 
     if (node.url) {
-      // Bookmark created → create raindrop
+      // Bookmark created → create raindrop (unless we've already created remotely)
       let collectionId = null;
       if (String(node.parentId) === String(unsortedFolderId)) {
         collectionId = UNSORTED_COLLECTION_ID;
@@ -1459,10 +1476,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   try {
     await removeLegacyTopFolders();
   } catch (_) {}
-  // Reflect current configured actions in tooltip
-  try {
-    await updateActionTitle();
-  } catch (_) {}
+  // No action title updates; popup handles interactions now
 
   if (details && details.reason === 'install') {
     // If a token already exists (e.g., synced profile), kick off a sync immediately
@@ -1488,10 +1502,7 @@ chrome.runtime.onStartup?.addListener(() => {
   try {
     chrome.alarms.create(ALARM_NAME, { periodInMinutes: SYNC_PERIOD_MINUTES });
   } catch (_) {}
-  // Update tooltip on browser startup
-  try {
-    updateActionTitle();
-  } catch (_) {}
+  // Popup handles interactions; nothing to update here
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -1503,106 +1514,28 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
-// Optional: manual trigger via action click for testing
-// ===== Action button single vs double-click handling =====
-const DOUBLE_CLICK_MS = 350;
-let lastActionClickTs = 0;
-let actionClickTimerId = null;
-
-async function getActionPreferences() {
-  try {
-    const data = await chromeP.storageGet([
-      'actionSingle',
-      'actionDouble',
-      'actionBehavior', // legacy single-click key
-    ]);
-    const single =
-      (data && data.actionSingle) || (data && data.actionBehavior) || 'sync';
-    const double = (data && data.actionDouble) || 'save';
-    return { single, double };
-  } catch (_) {
-    return { single: 'sync', double: 'save' };
-  }
-}
-
-async function performActionBehavior(behavior) {
-  try {
-    if (behavior === 'none') return;
-    if (behavior === 'options') {
-      try {
-        chrome.runtime.openOptionsPage();
-      } catch (_) {}
-      return;
-    }
-    if (behavior === 'save') {
-      await saveCurrentOrHighlightedTabsToRaindrop();
-      return;
-    }
-    // default: sync
-    await performSync();
-  } catch (_) {
+// Popup commands → message listener
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  (async () => {
     try {
-      await performSync();
-    } catch (_) {}
-  }
-}
-
-function behaviorLabel(behavior) {
-  switch (behavior) {
-    case 'sync':
-      return 'Sync';
-    case 'save':
-      return 'Save to Raindrop';
-    case 'options':
-      return 'Open Options';
-    case 'none':
-      return 'Do nothing';
-    default:
-      return 'Sync';
-  }
-}
-
-async function updateActionTitle() {
-  try {
-    const { single, double } = await getActionPreferences();
-    const title = `Click: ${behaviorLabel(
-      single,
-    )}; Double-click: ${behaviorLabel(double)}`;
-    try {
-      chrome.action?.setTitle({ title });
-    } catch (_) {}
-  } catch (_) {}
-}
-
-chrome.action?.onClicked.addListener(async () => {
-  const now = Date.now();
-  // Second click within threshold → double-click
-  if (lastActionClickTs && now - lastActionClickTs <= DOUBLE_CLICK_MS) {
-    lastActionClickTs = 0;
-    if (actionClickTimerId) {
-      try {
-        clearTimeout(actionClickTimerId);
-      } catch (_) {}
-      actionClickTimerId = null;
+      if (message && message.type === 'performSync') {
+        await performSync();
+        sendResponse({ ok: true });
+        return;
+      }
+      if (
+        message &&
+        message.type === 'saveCurrentOrHighlightedTabsToRaindrop'
+      ) {
+        await saveCurrentOrHighlightedTabsToRaindrop();
+        sendResponse({ ok: true });
+        return;
+      }
+    } catch (_) {
+      sendResponse({ ok: false });
     }
-    const { double } = await getActionPreferences();
-    await performActionBehavior(double);
-    return;
-  }
-
-  // First click → set timer; if no second click arrives, treat as single-click
-  lastActionClickTs = now;
-  if (actionClickTimerId) {
-    try {
-      clearTimeout(actionClickTimerId);
-    } catch (_) {}
-  }
-  actionClickTimerId = setTimeout(async () => {
-    lastActionClickTs = 0;
-    actionClickTimerId = null;
-    const { single } = await getActionPreferences();
-    await performActionBehavior(single);
-  }, DOUBLE_CLICK_MS + 10);
+  })();
+  return true; // keep the message channel open for async sendResponse
 });
 
 /**
@@ -1671,6 +1604,8 @@ async function saveCurrentOrHighlightedTabsToRaindrop() {
       title: title || url,
       url,
     }));
+    // Prevent duplicate mirror creation: mark these URLs as already saved remotely
+    rememberRecentlyCreatedRemoteUrls(toCreateLocally.map(({ url }) => url));
     // Merge mappings so future sync recognizes these new items
     const mergedItemMap = { ...((state && state.itemMap) || {}) };
     suppressLocalBookmarkEvents = true;
@@ -1732,15 +1667,7 @@ chrome.storage?.onChanged.addListener((changes, area) => {
       } catch (_) {}
     }
   }
-  if (
-    area === 'local' &&
-    changes &&
-    (changes.actionSingle || changes.actionDouble || changes.actionBehavior)
-  ) {
-    try {
-      updateActionTitle();
-    } catch (_) {}
-  }
+  // Action button preferences removed; no-op
 });
 
 // Open Options when user clicks token notification

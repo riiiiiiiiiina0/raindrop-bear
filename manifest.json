@@ -20,7 +20,8 @@
   },
   "options_page": "src/options.html",
   "action": {
-    "default_title": "Raindrop Bear"
+    "default_title": "Raindrop Bear",
+    "default_popup": "src/popup.html"
   },
   "icons": {
     "16": "icons/icon-16x16.png",
