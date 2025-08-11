@@ -18,8 +18,11 @@
   const notifyStatusEl = /** @type {HTMLSpanElement|null} */ (
     document.getElementById('notify-status')
   );
-  const actionEl = /** @type {HTMLSelectElement|null} */ (
-    document.getElementById('action-behavior')
+  const actionSingleEl = /** @type {HTMLSelectElement|null} */ (
+    document.getElementById('action-single')
+  );
+  const actionDoubleEl = /** @type {HTMLSelectElement|null} */ (
+    document.getElementById('action-double')
   );
 
   if (
@@ -29,7 +32,8 @@
     !(statusEl instanceof HTMLSpanElement) ||
     !(notifyEl instanceof HTMLInputElement) ||
     !(notifyStatusEl instanceof HTMLSpanElement) ||
-    !(actionEl instanceof HTMLSelectElement)
+    !(actionSingleEl instanceof HTMLSelectElement) ||
+    !(actionDoubleEl instanceof HTMLSelectElement)
   ) {
     // DOM not ready; abort quietly
     return;
@@ -38,7 +42,13 @@
   function load() {
     try {
       chrome.storage.local.get(
-        ['raindropApiToken', 'notifyOnSync', 'actionBehavior'],
+        [
+          'raindropApiToken',
+          'notifyOnSync',
+          'actionSingle',
+          'actionDouble',
+          'actionBehavior',
+        ],
         (data) => {
           if (tokenEl) tokenEl.value = (data && data.raindropApiToken) || '';
           const enabled =
@@ -46,8 +56,13 @@
               ? data.notifyOnSync
               : true; // default ON
           if (notifyEl) notifyEl.checked = !!enabled;
-          const behavior = (data && data.actionBehavior) || 'sync';
-          if (actionEl) actionEl.value = behavior;
+          const single =
+            (data && data.actionSingle) ||
+            (data && data.actionBehavior) ||
+            'sync';
+          const double = (data && data.actionDouble) || 'save';
+          if (actionSingleEl) actionSingleEl.value = single;
+          if (actionDoubleEl) actionDoubleEl.value = double;
         },
       );
     } catch (_) {}
@@ -115,16 +130,36 @@
       }
     });
 
-  // action behavior: save immediately
-  if (actionEl)
-    actionEl.addEventListener('change', () => {
-      const value = actionEl.value || 'sync';
+  // action single-click: save immediately
+  if (actionSingleEl)
+    actionSingleEl.addEventListener('change', () => {
+      const value = actionSingleEl.value || 'sync';
       try {
-        chrome.storage.local.set({ actionBehavior: value }, () => {
+        chrome.storage.local.set({ actionSingle: value }, () => {
           try {
             /** @type {any} */ (window)
               .Toastify({
-                text: '⚙️ Action behavior saved',
+                text: '⚙️ Single-click action saved',
+                duration: 3000,
+                position: 'right',
+                style: { background: '#64748b' },
+              })
+              .showToast();
+          } catch (_) {}
+        });
+      } catch (_) {}
+    });
+
+  // action double-click: save immediately
+  if (actionDoubleEl)
+    actionDoubleEl.addEventListener('change', () => {
+      const value = actionDoubleEl.value || 'save';
+      try {
+        chrome.storage.local.set({ actionDouble: value }, () => {
+          try {
+            /** @type {any} */ (window)
+              .Toastify({
+                text: '⚙️ Double-click action saved',
                 duration: 3000,
                 position: 'right',
                 style: { background: '#64748b' },

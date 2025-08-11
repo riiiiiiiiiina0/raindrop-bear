@@ -24,12 +24,12 @@
   <main class="max-w-xl mx-auto p-6">
     <header class="flex items-center gap-3 mb-6">
       <img src="../icons/icon-48x48.png" alt="" class="h-8 w-8 rounded-md shadow-sm" />
-      <h1 class="text-2xl font-semibold tracking-tight">Raindrop Bear</h1>
+      <h1 class="text-3xl font-semibold tracking-tight">Raindrop Bear</h1>
     </header>
 
     <section class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
       <div class="mb-4">
-        <h2 class="text-base/6 font-medium">🔐 Authentication</h2>
+        <h2 class="text-xl text-base/6 font-medium">🔐 Authentication</h2>
         <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
           Enter your Raindrop API token. It is stored locally and used only to communicate with
           <span class="font-mono text-gray-800 dark:text-gray-200">api.raindrop.io</span>.
@@ -60,7 +60,7 @@
     <section
       class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm mt-6 dark:border-gray-800 dark:bg-gray-900">
       <div class="mb-4">
-        <h2 class="text-base/6 font-medium">📣 Notifications</h2>
+        <h2 class="text-xl text-base/6 font-medium">📣 Notifications</h2>
         <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
           Control whether a notification is shown after each sync (success or failure).
         </p>
@@ -78,18 +78,28 @@
     <section
       class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm mt-6 dark:border-gray-800 dark:bg-gray-900">
       <div class="mb-4">
-        <h2 class="text-base/6 font-medium">👆 Action button</h2>
+        <h2 class="text-xl text-base/6 font-medium">👆 Action button</h2>
         <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Choose what happens when you click the extension icon.
+          Choose what happens on single-click and double-click of the extension icon.
         </p>
       </div>
       <div class="space-y-3">
         <label class="flex items-center justify-between">
-          <span class="text-sm font-medium">Behavior</span>
-          <select id="action-behavior"
-            class="rounded-lg border border-gray-300 bg-white/60 px-3 py-2 text-sm shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-950/60">
+          <span class="text-sm font-medium">Single-click</span>
+          <select id="action-single"
+            class="rounded-lg border border-gray-300 bg-white/60 px-3 py-2 text-sm shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-950/60 w-[240px]">
             <option value="sync">Sync (default)</option>
             <option value="save">Save to Raindrop</option>
+            <option value="options">Open Options page</option>
+            <option value="none">Do nothing</option>
+          </select>
+        </label>
+        <label class="flex items-center justify-between">
+          <span class="text-sm font-medium">Double-click</span>
+          <select id="action-double"
+            class="rounded-lg border border-gray-300 bg-white/60 px-3 py-2 text-sm shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-950/60 w-[240px]">
+            <option value="save">Save to Raindrop (default)</option>
+            <option value="sync">Sync</option>
             <option value="options">Open Options page</option>
             <option value="none">Do nothing</option>
           </select>

@@ -1496,10 +1496,29 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 // Optional: manual trigger via action click for testing
-chrome.action?.onClicked.addListener(async (tab) => {
+// ===== Action button single vs double-click handling =====
+const DOUBLE_CLICK_MS = 350;
+let lastActionClickTs = 0;
+let actionClickTimerId = null;
+
+async function getActionPreferences() {
   try {
-    const data = await chromeP.storageGet('actionBehavior');
-    const behavior = (data && data.actionBehavior) || 'sync';
+    const data = await chromeP.storageGet([
+      'actionSingle',
+      'actionDouble',
+      'actionBehavior', // legacy single-click key
+    ]);
+    const single =
+      (data && data.actionSingle) || (data && data.actionBehavior) || 'sync';
+    const double = (data && data.actionDouble) || 'save';
+    return { single, double };
+  } catch (_) {
+    return { single: 'sync', double: 'save' };
+  }
+}
+
+async function performActionBehavior(behavior) {
+  try {
     if (behavior === 'none') return;
     if (behavior === 'options') {
       try {
@@ -1512,10 +1531,43 @@ chrome.action?.onClicked.addListener(async (tab) => {
       return;
     }
     // default: sync
-    performSync();
+    await performSync();
   } catch (_) {
-    performSync();
+    try {
+      await performSync();
+    } catch (_) {}
   }
+}
+
+chrome.action?.onClicked.addListener(async () => {
+  const now = Date.now();
+  // Second click within threshold → double-click
+  if (lastActionClickTs && now - lastActionClickTs <= DOUBLE_CLICK_MS) {
+    lastActionClickTs = 0;
+    if (actionClickTimerId) {
+      try {
+        clearTimeout(actionClickTimerId);
+      } catch (_) {}
+      actionClickTimerId = null;
+    }
+    const { double } = await getActionPreferences();
+    await performActionBehavior(double);
+    return;
+  }
+
+  // First click → set timer; if no second click arrives, treat as single-click
+  lastActionClickTs = now;
+  if (actionClickTimerId) {
+    try {
+      clearTimeout(actionClickTimerId);
+    } catch (_) {}
+  }
+  actionClickTimerId = setTimeout(async () => {
+    lastActionClickTs = 0;
+    actionClickTimerId = null;
+    const { single } = await getActionPreferences();
+    await performActionBehavior(single);
+  }, DOUBLE_CLICK_MS + 10);
 });
 
 /**
