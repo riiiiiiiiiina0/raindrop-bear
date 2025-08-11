@@ -431,20 +431,23 @@ function computeRootCollectionId(collectionId, collectionsById) {
  *   collectionMap: Record<string,string>,
  *   rootFolderId: (string|null)
  * }} state - Previously persisted state.
- * @returns {Promise<{rootFolderId: string, groupMap: Record<string,string>, collectionMap: Record<string,string>}>}
- *   Updated folder ids and maps.
+ * @returns {Promise<{rootFolderId: string, groupMap: Record<string,string>, collectionMap: Record<string,string>, didChange: boolean}>}
+ *   Updated folder ids and maps, plus whether any local folder changes occurred.
  */
 async function syncFolders(groups, collectionsById, state) {
   const rootFolderId = await getOrCreateRootFolder();
   const groupMap = { ...(state.groupMap || {}) };
   const collectionMap = { ...(state.collectionMap || {}) };
+  let didChange = false;
 
   // Ensure group folders
   const currentGroupTitles = new Set();
 
   // Ensure special Unsorted folder exists before all groups and map it to -1
   try {
+    const prevUnsorted = collectionMap[String(UNSORTED_COLLECTION_ID)];
     const unsortedId = await getOrCreateChildFolder(rootFolderId, 'Unsorted');
+    if (prevUnsorted !== unsortedId) didChange = true;
     // Move to index 0 to keep before all group folders
     await chromeP.bookmarksMove(unsortedId, {
       parentId: rootFolderId,
@@ -465,6 +468,7 @@ async function syncFolders(groups, collectionsById, state) {
         await chromeP.bookmarksRemoveTree(folderId);
       } catch (_) {}
       delete groupMap[title];
+      didChange = true;
     }
   }
 
@@ -531,11 +535,13 @@ async function syncFolders(groups, collectionsById, state) {
             await chromeP.bookmarksUpdate(existingFolderId, {
               title: desiredTitle,
             });
+            didChange = true;
           }
           if (node.parentId !== parentFolderId) {
             await chromeP.bookmarksMove(existingFolderId, {
               parentId: parentFolderId,
             });
+            didChange = true;
           }
         } else {
           // recreate
@@ -544,6 +550,7 @@ async function syncFolders(groups, collectionsById, state) {
             desiredTitle,
           );
           collectionMap[String(id)] = newNodeId;
+          didChange = true;
         }
       } catch (_) {
         const newNodeId = await getOrCreateChildFolder(
@@ -551,6 +558,7 @@ async function syncFolders(groups, collectionsById, state) {
           desiredTitle,
         );
         collectionMap[String(id)] = newNodeId;
+        didChange = true;
       }
     } else {
       const newNodeId = await getOrCreateChildFolder(
@@ -558,6 +566,7 @@ async function syncFolders(groups, collectionsById, state) {
         desiredTitle,
       );
       collectionMap[String(id)] = newNodeId;
+      didChange = true;
     }
   }
 
@@ -632,11 +641,12 @@ async function syncFolders(groups, collectionsById, state) {
         await chromeP.bookmarksRemoveTree(folderId);
       } catch (_) {}
       delete collectionMap[colId];
+      didChange = true;
     }
   }
 
   await saveState({ groupMap, collectionMap, rootFolderId });
-  return { rootFolderId, groupMap, collectionMap };
+  return { rootFolderId, groupMap, collectionMap, didChange };
 }
 
 // ===== Raindrop Items (Bookmarks) Sync =====
@@ -665,7 +675,7 @@ function extractCollectionId(item) {
  * @param {(string|null)} lastSyncISO - ISO timestamp of the last successful sync.
  * @param {Record<string,string>} collectionMap - Map of collectionId → Chrome folder id.
  * @param {Record<string,string>} itemMap - Existing map of raindrop _id → Chrome bookmark id.
- * @returns {Promise<{ itemMap: Record<string,string>, newLastSyncISO: string }>} Updated map and new high-water mark.
+ * @returns {Promise<{ itemMap: Record<string,string>, newLastSyncISO: string, didChange: boolean }>} Updated map, new high-water mark, and whether any local bookmarks changed.
  */
 async function syncNewAndUpdatedItems(lastSyncISO, collectionMap, itemMap) {
   let maxLastUpdate = lastSyncISO ? new Date(lastSyncISO) : new Date(0);
@@ -673,6 +683,7 @@ async function syncNewAndUpdatedItems(lastSyncISO, collectionMap, itemMap) {
   let stop = false;
   const isInitial = !lastSyncISO;
   const folderInsertionCount = new Map(); // Map<string, number>
+  let didChange = false;
 
   while (!stop) {
     const res = await apiGET(
@@ -729,6 +740,7 @@ async function syncNewAndUpdatedItems(lastSyncISO, collectionMap, itemMap) {
                 title: item.title || '',
                 url: item.link || item.url || '',
               });
+              didChange = true;
             }
             // Reposition to maintain lastUpdate DESC ordering
             if (!shouldSkipCreate && targetFolderId) {
@@ -738,6 +750,7 @@ async function syncNewAndUpdatedItems(lastSyncISO, collectionMap, itemMap) {
                   await chromeP.bookmarksMove(localId, {
                     parentId: targetFolderId,
                   });
+                  didChange = true;
                 }
               } else {
                 // Incremental: insert at current head slot for this folder
@@ -747,6 +760,7 @@ async function syncNewAndUpdatedItems(lastSyncISO, collectionMap, itemMap) {
                   parentId: targetFolderId,
                   index: current,
                 });
+                didChange = true;
               }
             }
           } else {
@@ -764,6 +778,7 @@ async function syncNewAndUpdatedItems(lastSyncISO, collectionMap, itemMap) {
               }
               const newNode = await chromeP.bookmarksCreate(createDetails);
               itemMap[raindropId] = newNode.id;
+              didChange = true;
             }
           }
         } catch (e) {
@@ -783,6 +798,7 @@ async function syncNewAndUpdatedItems(lastSyncISO, collectionMap, itemMap) {
               }
               const newNode = await chromeP.bookmarksCreate(createDetails);
               itemMap[raindropId] = newNode.id;
+              didChange = true;
             } catch (_) {}
           }
         }
@@ -801,6 +817,7 @@ async function syncNewAndUpdatedItems(lastSyncISO, collectionMap, itemMap) {
             }
             const newNode = await chromeP.bookmarksCreate(createDetails);
             itemMap[raindropId] = newNode.id;
+            didChange = true;
           } catch (e) {
             // Only retry for Unsorted
             if (isUnsorted) {
@@ -818,6 +835,7 @@ async function syncNewAndUpdatedItems(lastSyncISO, collectionMap, itemMap) {
                 }
                 const newNode = await chromeP.bookmarksCreate(createDetails);
                 itemMap[raindropId] = newNode.id;
+                didChange = true;
               } catch (_) {}
             }
           }
@@ -831,7 +849,7 @@ async function syncNewAndUpdatedItems(lastSyncISO, collectionMap, itemMap) {
     page += 1;
   }
 
-  return { itemMap, newLastSyncISO: maxLastUpdate.toISOString() };
+  return { itemMap, newLastSyncISO: maxLastUpdate.toISOString(), didChange };
 }
 
 /**
@@ -860,11 +878,12 @@ async function ensureUnsortedFolder(collectionMap) {
  * @param {(string|null)} lastSyncISO - ISO timestamp of the last successful sync.
  * @param {Record<string,string>} itemMap - Map of raindrop _id → Chrome bookmark id (mutated).
  * @param {Record<string,string>} collectionMap - Map of collectionId → Chrome folder id.
- * @returns {Promise<{ itemMap: Record<string,string> }>} Updated item map after deletions.
+ * @returns {Promise<{ itemMap: Record<string,string>, didChange: boolean }>} Updated item map after deletions and whether any local bookmarks were removed.
  */
 async function syncDeletedItems(lastSyncISO, itemMap, collectionMap) {
   let page = 0;
   let stop = false;
+  let didChange = false;
 
   while (!stop) {
     const res = await apiGET(
@@ -884,6 +903,7 @@ async function syncDeletedItems(lastSyncISO, itemMap, collectionMap) {
           await chromeP.bookmarksRemove(localId);
         } catch (_) {}
         delete itemMap[raindropId];
+        didChange = true;
       } else {
         // Optional: best-effort cleanup by URL in expected folder
         const collectionId = extractCollectionId(item);
@@ -894,7 +914,10 @@ async function syncDeletedItems(lastSyncISO, itemMap, collectionMap) {
             const found = children.find(
               (c) => c.url && c.url === (item.link || item.url),
             );
-            if (found) await chromeP.bookmarksRemove(found.id);
+            if (found) {
+              await chromeP.bookmarksRemove(found.id);
+              didChange = true;
+            }
           } catch (_) {}
         }
       }
@@ -903,7 +926,7 @@ async function syncDeletedItems(lastSyncISO, itemMap, collectionMap) {
     page += 1;
   }
 
-  return { itemMap };
+  return { itemMap, didChange };
 }
 
 /**
@@ -996,6 +1019,7 @@ async function performSync() {
   } catch (_) {}
 
   let didSucceed = false;
+  let hasAnyChanges = false;
   // Show action badge during sync
   setBadge('Sync', '#38bdf8'); // Tailwind sky-400
   try {
@@ -1017,20 +1041,26 @@ async function performSync() {
     );
 
     // 2) Sync folders (groups + collections)
-    const { collectionMap } = await syncFolders(groups, collectionsById, state);
+    const { collectionMap, didChange: foldersChanged } = await syncFolders(
+      groups,
+      collectionsById,
+      state,
+    );
 
     // 3) Sync new/updated items
-    const { itemMap: updatedItemMap, newLastSyncISO } =
-      await syncNewAndUpdatedItems(state.lastSync, collectionMap, {
-        ...(state.itemMap || {}),
-      });
+    const {
+      itemMap: updatedItemMap,
+      newLastSyncISO,
+      didChange: itemsChanged,
+    } = await syncNewAndUpdatedItems(state.lastSync, collectionMap, {
+      ...(state.itemMap || {}),
+    });
 
     // 4) Sync deleted items (trash)
-    const { itemMap: prunedItemMap } = await syncDeletedItems(
-      state.lastSync,
-      updatedItemMap,
-      collectionMap,
-    );
+    const { itemMap: prunedItemMap, didChange: deletionsChanged } =
+      await syncDeletedItems(state.lastSync, updatedItemMap, collectionMap);
+
+    hasAnyChanges = Boolean(foldersChanged || itemsChanged || deletionsChanged);
 
     // 5) Persist state
     await saveState({
@@ -1066,7 +1096,7 @@ async function performSync() {
       setBadge('Error', '#ef4444'); // Tailwind red-500
       scheduleClearBadge(3000);
     }
-    if (didSucceed && notifyPref) {
+    if (didSucceed && notifyPref && hasAnyChanges) {
       try {
         notifySyncSuccess('Sync completed successfully.');
       } catch (_) {}
