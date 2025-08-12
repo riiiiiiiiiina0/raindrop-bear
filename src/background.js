@@ -2045,13 +2045,26 @@ async function recoverSavedProject(collectionId) {
       (a, b) => (a.meta?.index ?? 0) - (b.meta?.index ?? 0),
     );
 
-    // Create a new window and focus on it
-    const newWindow = await chrome.windows.create({ focused: true });
+    // Create a new window with the first URL to avoid an NTP/blank tab
+    const first = sorted[0];
+    const newWindow = await chrome.windows.create({
+      focused: true,
+      url: first.url,
+    });
     if (!newWindow) {
       throw new Error('Failed to create new window');
     }
 
-    const defaultTabs = await chrome.tabs.query({ windowId: newWindow.id });
+    // Ensure the first tab's pin state matches metadata
+    const [activeTab] = await chrome.tabs.query({
+      windowId: newWindow.id,
+      active: true,
+    });
+    if (activeTab && activeTab.id && (first.meta?.pinned ?? false)) {
+      try {
+        await chrome.tabs.update(activeTab.id, { pinned: true });
+      } catch (_) {}
+    }
 
     /**
      * @typedef {Object} TabGroupInfo
@@ -2061,8 +2074,19 @@ async function recoverSavedProject(collectionId) {
 
     const /** @type {TabGroupInfo[]} */ tabGroups = [];
 
-    // Create tabs
-    for (const it of sorted) {
+    // If the first tab belongs to a group, seed it
+    if (activeTab && activeTab.id && first.meta?.tabGroup) {
+      tabGroups.push({
+        meta: {
+          tabGroup: first.meta?.tabGroup,
+          tabGroupColor: first.meta?.tabGroupColor,
+        },
+        tabIds: [activeTab.id],
+      });
+    }
+
+    // Create remaining tabs
+    for (const it of sorted.slice(1)) {
       const newTab = await chrome.tabs.create({
         url: it.url,
         windowId: newWindow.id,
@@ -2102,10 +2126,7 @@ async function recoverSavedProject(collectionId) {
       }
     }
 
-    // remove default tabs
-    for (const tab of defaultTabs) {
-      tab.id && chrome.tabs.remove(tab.id);
-    }
+    // No default tabs to remove because we created the window with a URL
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('Failed to parse export.html', e);
