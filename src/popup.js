@@ -157,10 +157,25 @@
           for (const it of items) {
             const li = document.createElement('li');
             li.className =
-              'px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-900 flex items-center justify-between gap-2 cursor-pointer';
+              'pl-4 pr-1 py-1 text-sm hover:bg-gray-200 dark:hover:bg-gray-800 flex items-center justify-between gap-2 cursor-pointer';
 
             const left = document.createElement('div');
             left.className = 'flex min-w-0 items-center gap-2';
+
+            // Avatar (cover image)
+            const avatar = document.createElement('img');
+            avatar.className = 'h-4 w-4 rounded object-cover flex-none';
+            const cover = (it && it.cover) || '';
+            if (cover) {
+              avatar.src = String(cover);
+              avatar.alt = '';
+            } else {
+              // tiny transparent placeholder to keep layout consistent
+              avatar.src =
+                'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+              avatar.alt = '';
+            }
+
             const title = document.createElement('span');
             title.className = 'truncate';
             title.textContent = String(it.title || 'Untitled');
@@ -171,6 +186,7 @@
             // if (it.lastUpdate)
             //   parts.push(new Date(it.lastUpdate).toLocaleDateString());
             // meta.textContent = parts.join(' · ');
+            left.appendChild(avatar);
             left.appendChild(title);
             // left.appendChild(meta);
 
@@ -182,7 +198,7 @@
             replaceBtn.title = 'Replace';
             replaceBtn.textContent = '🔼';
             replaceBtn.className =
-              'px-2 py-1 text-xs rounded bg-amber-300 text-white hover:bg-black hover:text-white cursor-pointer';
+              'px-2 py-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
             replaceBtn.addEventListener('click', async (e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -198,7 +214,7 @@
             deleteBtn.title = 'Delete';
             deleteBtn.textContent = '❌';
             deleteBtn.className =
-              'px-2 py-1 text-xs rounded bg-red-300 text-white hover:bg-black hover:text-white cursor-pointer';
+              'px-2 py-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
             deleteBtn.addEventListener('click', async (e) => {
               e.preventDefault();
               e.stopPropagation();

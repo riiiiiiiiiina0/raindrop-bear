@@ -1942,7 +1942,7 @@ async function saveTabsListAsProject(name, tabsList) {
 /**
  * Lists root collections that belong to the "Saved Projects" group, in the
  * exact order specified by the group's `collections` array.
- * @returns {Promise<Array<{id:number,title:string,count?:number,lastUpdate?:string}>>}
+ * @returns {Promise<Array<{id:number,title:string,count?:number,lastUpdate?:string,cover?:string}>>}
  */
 async function listSavedProjects() {
   // Fetch groups and root collections
@@ -1971,6 +1971,7 @@ async function listSavedProjects() {
       title: c.title || '',
       count: c.count,
       lastUpdate: c.lastUpdate,
+      cover: Array.isArray(c.cover) ? c.cover[0] || '' : c.cover || '',
     });
   }
   return result;
