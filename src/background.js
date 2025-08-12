@@ -2214,12 +2214,26 @@ async function replaceSavedProject(collectionId) {
     const roots = Array.isArray(rootsRes?.items) ? rootsRes.items : [];
     const existing = roots.find((c) => Number(c?._id) === oldId);
     const title = existing?.title || 'Project';
+    const existingCoverArray = Array.isArray(existing?.cover)
+      ? existing.cover.filter(Boolean)
+      : existing?.cover
+      ? [existing.cover]
+      : [];
 
     // Create a new collection with the same title
     const created = await apiPOST('/collection', { title });
     const createdItem = created && (created.item || created.data || created);
     const newId = createdItem && (createdItem._id ?? createdItem.id);
     if (newId == null) throw new Error('Failed to create collection');
+
+    // Preserve existing cover if there was one
+    if (existingCoverArray.length > 0) {
+      try {
+        await apiPUT(`/collection/${encodeURIComponent(newId)}`, {
+          cover: existingCoverArray,
+        });
+      } catch (_) {}
+    }
 
     // Update Saved Projects group ordering: replace oldId with newId at the same index
     try {
