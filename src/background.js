@@ -536,6 +536,7 @@ async function syncFolders(groups, collectionsById, state) {
   const groupMap = { ...(state.groupMap || {}) };
   const collectionMap = { ...(state.collectionMap || {}) };
   let didChange = false;
+  const SAVED_PROJECTS_TITLE = 'Saved Projects';
 
   // Ensure group folders
   const currentGroupTitles = new Set();
@@ -554,13 +555,17 @@ async function syncFolders(groups, collectionsById, state) {
   } catch (_) {}
   for (const g of groups) {
     const title = g.title || '';
+    if (title === SAVED_PROJECTS_TITLE) {
+      // Explicitly skip creating a local folder for Saved Projects group
+      continue;
+    }
     currentGroupTitles.add(title);
     const folderId = await getOrCreateChildFolder(rootFolderId, title);
     groupMap[title] = folderId;
   }
   // Remove stale group folders we previously created (not present now)
   for (const [title, folderId] of Object.entries(groupMap)) {
-    if (!currentGroupTitles.has(title)) {
+    if (!currentGroupTitles.has(title) || title === SAVED_PROJECTS_TITLE) {
       try {
         await chromeP.bookmarksRemoveTree(folderId);
       } catch (_) {}
@@ -1397,14 +1402,36 @@ async function performSync() {
     // 1) Fetch groups and collections
     const { groups, rootCollections, childCollections } =
       await fetchGroupsAndCollections();
+
+    // Filter out the special "Saved Projects" group entirely from sync
+    const SAVED_PROJECTS_TITLE = 'Saved Projects';
+    const filteredGroups = (groups || []).filter(
+      (g) => (g && g.title) !== SAVED_PROJECTS_TITLE,
+    );
+
+    // Build collections index, then remove any collection whose root belongs to
+    // the "Saved Projects" group so we do not create local folders for them
     const collectionsById = buildCollectionsIndex(
       rootCollections,
       childCollections,
     );
+    const rootCollectionToGroupTitleAll = buildCollectionToGroupMap(
+      groups || [],
+    );
+    for (const id of Array.from(collectionsById.keys())) {
+      const groupTitle = computeGroupForCollection(
+        id,
+        collectionsById,
+        rootCollectionToGroupTitleAll,
+      );
+      if (groupTitle === SAVED_PROJECTS_TITLE) {
+        collectionsById.delete(id);
+      }
+    }
 
     // 2) Sync folders (groups + collections)
     const { collectionMap, didChange: foldersChanged } = await syncFolders(
-      groups,
+      filteredGroups,
       collectionsById,
       state,
     );
@@ -1794,7 +1821,7 @@ async function saveTabsListAsProject(name, tabsList) {
     if (projectCollectionId == null)
       throw new Error('Failed to create collection');
 
-    // Add to Saved Projects group list in correct position (append)
+    // Add to Saved Projects group list in correct position (prepend to first)
     try {
       const newGroups = groupsArray.slice();
       const entry = {
@@ -1806,8 +1833,9 @@ async function saveTabsListAsProject(name, tabsList) {
       const cols = Array.isArray(entry.collections)
         ? entry.collections.slice()
         : [];
-      cols.push(projectCollectionId);
-      entry.collections = cols;
+      // Ensure new project collection id is first, without duplication
+      const filtered = cols.filter((cid) => cid !== projectCollectionId);
+      entry.collections = [projectCollectionId, ...filtered];
       newGroups[groupIndex] = entry;
       await apiPUT('/user', { groups: newGroups });
     } catch (_) {}

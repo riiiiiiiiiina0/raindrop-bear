@@ -20,32 +20,32 @@
 </head>
 
 <body class="bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 antialiased">
-  <main class="p-4">
-    <div class="flex items-center gap-3 mb-4">
+  <main class="">
+    <div class="p-4 flex items-center gap-3">
       <img src="../icons/icon-32x32.png" alt="" class="h-6 w-6 rounded" />
       <h1 class="text-base font-semibold">Raindrop Bear</h1>
     </div>
 
-    <div class="flex flex-col gap-3">
+    <div class="flex flex-col">
       <button id="sync-btn"
-        class="inline-flex items-center rounded-lg bg-blue-500 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
+        class="inline-flex items-center bg-blue-500 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-black hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
         🔄 Sync bookmarks
       </button>
       <button id="save-btn"
-        class="inline-flex items-center rounded-lg bg-green-500 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-60">
+        class="inline-flex items-center bg-green-500 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-black hover:text-white focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-60">
         ⬆️ Save to Unsorted
       </button>
       <button id="save-project-btn"
-        class="inline-flex items-center rounded-lg bg-orange-400 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-60">
+        class="inline-flex items-center bg-orange-400 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-black hover:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-60">
         💾 Save as project
       </button>
       <button id="save-window-project-btn"
-        class="inline-flex items-center rounded-lg bg-orange-500 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:opacity-60">
+        class="inline-flex items-center bg-orange-500 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-black hover:text-white focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:opacity-60">
         💾 Save current window as project
       </button>
     </div>
 
-    <p id="status" class="text-xs mt-3 text-gray-600 dark:text-gray-400"></p>
+    <p id="status" class="text-xs m-3 text-gray-600 dark:text-gray-400"></p>
   </main>
 
   <script src="./popup.js"></script>

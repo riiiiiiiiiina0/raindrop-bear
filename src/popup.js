@@ -27,7 +27,7 @@
     if (!statusEl) return;
     statusEl.textContent = text || '';
     statusEl.className =
-      'text-xs mt-3 ' +
+      'text-xs m-3 ' +
       (tone === 'error'
         ? 'text-red-600 dark:text-red-400'
         : 'text-gray-600 dark:text-gray-400');
