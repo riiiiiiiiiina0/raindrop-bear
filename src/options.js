@@ -18,12 +18,6 @@
   const notifyStatusEl = /** @type {HTMLSpanElement|null} */ (
     document.getElementById('notify-status')
   );
-  const actionSingleEl = /** @type {HTMLSelectElement|null} */ (
-    document.getElementById('action-single')
-  );
-  const actionDoubleEl = /** @type {HTMLSelectElement|null} */ (
-    document.getElementById('action-double')
-  );
 
   if (
     !(formEl instanceof HTMLFormElement) ||
@@ -31,9 +25,7 @@
     !(saveEl instanceof HTMLButtonElement) ||
     !(statusEl instanceof HTMLSpanElement) ||
     !(notifyEl instanceof HTMLInputElement) ||
-    !(notifyStatusEl instanceof HTMLSpanElement) ||
-    !(actionSingleEl instanceof HTMLSelectElement) ||
-    !(actionDoubleEl instanceof HTMLSelectElement)
+    !(notifyStatusEl instanceof HTMLSpanElement)
   ) {
     // DOM not ready; abort quietly
     return;
@@ -41,30 +33,14 @@
 
   function load() {
     try {
-      chrome.storage.local.get(
-        [
-          'raindropApiToken',
-          'notifyOnSync',
-          'actionSingle',
-          'actionDouble',
-          'actionBehavior',
-        ],
-        (data) => {
-          if (tokenEl) tokenEl.value = (data && data.raindropApiToken) || '';
-          const enabled =
-            data && typeof data.notifyOnSync === 'boolean'
-              ? data.notifyOnSync
-              : true; // default ON
-          if (notifyEl) notifyEl.checked = !!enabled;
-          const single =
-            (data && data.actionSingle) ||
-            (data && data.actionBehavior) ||
-            'sync';
-          const double = (data && data.actionDouble) || 'save';
-          if (actionSingleEl) actionSingleEl.value = single;
-          if (actionDoubleEl) actionDoubleEl.value = double;
-        },
-      );
+      chrome.storage.local.get(['raindropApiToken', 'notifyOnSync'], (data) => {
+        if (tokenEl) tokenEl.value = (data && data.raindropApiToken) || '';
+        const enabled =
+          data && typeof data.notifyOnSync === 'boolean'
+            ? data.notifyOnSync
+            : true; // default ON
+        if (notifyEl) notifyEl.checked = !!enabled;
+      });
     } catch (_) {}
   }
 
@@ -130,44 +106,6 @@
       }
     });
 
-  // action single-click: save immediately
-  if (actionSingleEl)
-    actionSingleEl.addEventListener('change', () => {
-      const value = actionSingleEl.value || 'sync';
-      try {
-        chrome.storage.local.set({ actionSingle: value }, () => {
-          try {
-            /** @type {any} */ (window)
-              .Toastify({
-                text: '⚙️ Single-click action saved',
-                duration: 3000,
-                position: 'right',
-                style: { background: '#64748b' },
-              })
-              .showToast();
-          } catch (_) {}
-        });
-      } catch (_) {}
-    });
-
-  // action double-click: save immediately
-  if (actionDoubleEl)
-    actionDoubleEl.addEventListener('change', () => {
-      const value = actionDoubleEl.value || 'save';
-      try {
-        chrome.storage.local.set({ actionDouble: value }, () => {
-          try {
-            /** @type {any} */ (window)
-              .Toastify({
-                text: '⚙️ Double-click action saved',
-                duration: 3000,
-                position: 'right',
-                style: { background: '#64748b' },
-              })
-              .showToast();
-          } catch (_) {}
-        });
-      } catch (_) {}
-    });
+  // removed action button preferences
   load();
 })();
