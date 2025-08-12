@@ -9,6 +9,7 @@ import {
   apiPOST as raindropPOST,
   apiPUT as raindropPUT,
   apiDELETE as raindropDELETE,
+  apiGETText as raindropGETText,
 } from './modules/raindrop.js';
 // API token is loaded from storage (set via Options page)
 let RAINDROP_API_TOKEN = '';
@@ -141,6 +142,38 @@ async function apiGET(pathWithQuery) {
   try {
     setRaindropToken(RAINDROP_API_TOKEN);
     return await raindropGET(pathWithQuery);
+  } catch (err) {
+    if (err && (err.status === 401 || err.status === 403)) {
+      notifyMissingOrInvalidToken(
+        'Invalid API token. Please update your Raindrop API token.',
+      );
+    }
+    throw err;
+  }
+}
+
+/**
+ * Perform a GET request that expects text/html response.
+ * @param {string} pathWithQuery
+ * @returns {Promise<string>} response text
+ */
+async function apiGETText(pathWithQuery) {
+  if (!RAINDROP_API_TOKEN) {
+    try {
+      const data = await chromeP.storageGet('raindropApiToken');
+      RAINDROP_API_TOKEN =
+        data && data.raindropApiToken ? data.raindropApiToken : '';
+    } catch (_) {}
+  }
+  if (!RAINDROP_API_TOKEN) {
+    notifyMissingOrInvalidToken(
+      'No API token configured. Please add your Raindrop API token.',
+    );
+    throw new Error('Missing Raindrop API token');
+  }
+  try {
+    setRaindropToken(RAINDROP_API_TOKEN);
+    return await raindropGETText(pathWithQuery);
   } catch (err) {
     if (err && (err.status === 401 || err.status === 403)) {
       notifyMissingOrInvalidToken(
@@ -1550,6 +1583,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse({ ok: true });
         return;
       }
+      if (message && message.type === 'listSavedProjects') {
+        const items = await listSavedProjects();
+        sendResponse({ ok: true, items });
+        return;
+      }
+      if (message && message.type === 'recoverSavedProject') {
+        const id = message && message.id;
+        await recoverSavedProject(id);
+        sendResponse({ ok: true });
+        return;
+      }
       if (
         message &&
         message.type === 'saveCurrentOrHighlightedTabsToRaindrop'
@@ -1880,6 +1924,191 @@ async function saveTabsListAsProject(name, tabsList) {
     try {
       notify(`Failed to save project: ${e}`);
     } catch (_) {}
+  }
+}
+
+/**
+ * Lists root collections that belong to the "Saved Projects" group, in the
+ * exact order specified by the group's `collections` array.
+ * @returns {Promise<Array<{id:number,title:string,count?:number,lastUpdate?:string}>>}
+ */
+async function listSavedProjects() {
+  // Fetch groups and root collections
+  const [userRes, rootsRes] = await Promise.all([
+    apiGET('/user'),
+    apiGET('/collections'),
+  ]);
+  const groups =
+    userRes && userRes.user && Array.isArray(userRes.user.groups)
+      ? userRes.user.groups
+      : [];
+  const saved = groups.find((g) => (g && g.title) === 'Saved Projects');
+  const order =
+    saved && Array.isArray(saved.collections) ? saved.collections : [];
+  const rootCollections = Array.isArray(rootsRes?.items) ? rootsRes.items : [];
+  const byId = new Map();
+  for (const c of rootCollections) {
+    if (c && c._id != null) byId.set(c._id, c);
+  }
+  const result = [];
+  for (const id of order) {
+    const c = byId.get(id);
+    if (!c) continue;
+    result.push({
+      id: c._id,
+      title: c.title || '',
+      count: c.count,
+      lastUpdate: c.lastUpdate,
+    });
+  }
+  return result;
+}
+
+/**
+ * Recover a saved project by collection id: opens a new window, recreates tabs
+ * in the saved order, and restores tab groups (title and color) when metadata
+ * is present. Handles missing/invalid metadata and sparse indices.
+ * @param {number|string} collectionId
+ */
+async function recoverSavedProject(collectionId) {
+  const colId = Number(collectionId);
+  if (!Number.isFinite(colId)) return;
+
+  // Export all items on that collection
+  const html = await apiGETText(`/raindrops/${colId}/export.html`);
+
+  /**
+   * @typedef {Object} SavedProjectBasicMeta
+   * @property {number} index
+   * @property {boolean} [pinned]
+   */
+
+  /**
+   * @typedef {Object} SavedProjectTabGroupMeta
+   * @property {string} [tabGroup]
+   * @property {string} [tabGroupColor]
+   */
+
+  /**
+   * @typedef {SavedProjectBasicMeta & SavedProjectTabGroupMeta} SavedProjectItemMeta
+   */
+
+  /**
+   * @typedef {Object} SavedProjectItem
+   * @property {string} url
+   * @property {string} title
+   * @property {SavedProjectItemMeta} [meta]
+   */
+
+  // Parse Netscape bookmark HTML. Extract url, title, and metadata JSON from DD after each A.
+  try {
+    const /** @type {SavedProjectItem[]} */ items = [];
+
+    // Regex to find A tags inside DL sections; capture href and inner text.
+    const linkRegex = /<DT>\s*<A\s+[^>]*HREF="([^"]+)"[^>]*>([\s\S]*?)<\/A>/gi;
+    const ddRegex = /<DD>\s*([\s\S]*?)(?=(?:<DT>|<\/DL>|$))/i;
+    let match;
+    while ((match = linkRegex.exec(html)) !== null) {
+      const url = match[1] ? match[1].trim() : '';
+      const rawTitle = match[2] || '';
+      const title = rawTitle
+        .replace(/\s+/g, ' ')
+        .replace(/<[^>]*>/g, '')
+        .trim();
+      // Look ahead from the end of this A tag for a following <DD> block
+      const tail = html.slice(linkRegex.lastIndex);
+      const ddMatch = ddRegex.exec(tail);
+      let meta;
+      if (ddMatch && ddMatch[1]) {
+        const ddText = ddMatch[1]
+          .replace(/\n|\r/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        // HTML entities for quotes in sample are &quot;
+        const normalized = ddText
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'");
+        try {
+          meta = JSON.parse(normalized);
+        } catch (_) {
+          meta = undefined;
+        }
+      }
+      items.push({ url, title, meta });
+    }
+
+    if (items.length === 0) {
+      throw new Error('No items found in export.html');
+    }
+
+    const sorted = items.sort(
+      (a, b) => (a.meta?.index ?? 0) - (b.meta?.index ?? 0),
+    );
+
+    // Create a new window and focus on it
+    const newWindow = await chrome.windows.create({ focused: true });
+    if (!newWindow) {
+      throw new Error('Failed to create new window');
+    }
+
+    const defaultTabs = await chrome.tabs.query({ windowId: newWindow.id });
+
+    /**
+     * @typedef {Object} TabGroupInfo
+     * @property {SavedProjectTabGroupMeta} meta
+     * @property {number[]} tabIds
+     */
+
+    const /** @type {TabGroupInfo[]} */ tabGroups = [];
+
+    // Create tabs
+    for (const it of sorted) {
+      const newTab = await chrome.tabs.create({
+        url: it.url,
+        windowId: newWindow.id,
+        pinned: it.meta?.pinned ?? false,
+      });
+
+      if (newTab && newTab.id && it.meta?.tabGroup) {
+        let group = tabGroups.find(
+          (g) => g.meta.tabGroup === it.meta?.tabGroup,
+        );
+        if (!group) {
+          group = {
+            meta: {
+              tabGroup: it.meta?.tabGroup,
+              tabGroupColor: it.meta?.tabGroupColor,
+            },
+            tabIds: [],
+          };
+          tabGroups.push(group);
+        }
+        group.tabIds.push(newTab.id);
+      }
+    }
+
+    // Create tab groups
+    for (const group of tabGroups) {
+      if (group.tabIds.length > 0) {
+        // @ts-ignore
+        const tg = await chrome.tabs.group({ tabIds: group.tabIds });
+        if (tg) {
+          chrome.tabGroups.update(tg, {
+            title: group.meta.tabGroup,
+            // @ts-ignore
+            color: group.meta.tabGroupColor,
+          });
+        }
+      }
+    }
+
+    // remove default tabs
+    for (const tab of defaultTabs) {
+      tab.id && chrome.tabs.remove(tab.id);
+    }
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to parse export.html', e);
   }
 }
 

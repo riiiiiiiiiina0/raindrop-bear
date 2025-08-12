@@ -14,6 +14,9 @@
   const statusEl = /** @type {HTMLParagraphElement|null} */ (
     document.getElementById('status')
   );
+  const projectsListEl = /** @type {HTMLUListElement|null} */ (
+    document.getElementById('projects-list')
+  );
 
   if (
     !(syncBtn instanceof HTMLButtonElement) ||
@@ -126,6 +129,53 @@
         ? `💾 Save ${count} ${tabLabel} as project`
         : '💾 Save as project';
     saveWindowProjectBtn.textContent = '💾 Save current window as project';
+
+    // Load saved projects list
+    try {
+      if (projectsListEl instanceof HTMLUListElement) {
+        projectsListEl.innerHTML = '';
+        const loading = document.createElement('li');
+        loading.className =
+          'px-4 py-2 text-xs text-gray-500 dark:text-gray-400';
+        loading.textContent = 'Loading …';
+        projectsListEl.appendChild(loading);
+
+        const res = await sendCommand('listSavedProjects');
+        const items =
+          res && res.ok && Array.isArray(res.items) ? res.items : [];
+
+        projectsListEl.innerHTML = '';
+        if (items.length === 0) {
+          const li = document.createElement('li');
+          li.className = 'px-4 py-2 text-xs text-gray-500 dark:text-gray-400';
+          li.textContent = 'No saved projects';
+          projectsListEl.appendChild(li);
+        } else {
+          for (const it of items) {
+            const li = document.createElement('li');
+            li.className =
+              'px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-900 cursor-pointer flex items-center justify-between gap-2';
+            const title = document.createElement('span');
+            title.textContent = String(it.title || 'Untitled');
+            const meta = document.createElement('span');
+            meta.className = 'text-[10px] text-gray-400';
+            const parts = [];
+            if (typeof it.count === 'number') parts.push(`${it.count}`);
+            if (it.lastUpdate)
+              parts.push(new Date(it.lastUpdate).toLocaleDateString());
+            meta.textContent = parts.join(' · ');
+            li.appendChild(title);
+            li.appendChild(meta);
+            li.addEventListener('click', async () => {
+              li.classList.add('opacity-60');
+              await sendCommand('recoverSavedProject', { id: it.id });
+              window.close();
+            });
+            projectsListEl.appendChild(li);
+          }
+        }
+      }
+    } catch (_) {}
   })();
 
   saveBtn.addEventListener('click', async () => {

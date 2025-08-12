@@ -59,6 +59,37 @@ export async function apiGET(pathWithQuery) {
 }
 
 /**
+ * Performs a GET request and returns raw text (no JSON parsing).
+ * Useful for endpoints like export.html that return text/html.
+ *
+ * @param {string} pathWithQuery
+ * @returns {Promise<string>} Response body as text
+ * @throws {Error} If the API response is not OK
+ */
+export async function apiGETText(pathWithQuery) {
+  const url = `${RAINDROP_API_BASE}${
+    pathWithQuery.startsWith('/') ? '' : '/'
+  }${pathWithQuery}`;
+  await loadTokenIfNeeded();
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${RAINDROP_API_TOKEN}`,
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    const err = new Error(
+      `Raindrop API error ${res.status} for ${pathWithQuery}: ${text}`,
+    );
+    err['status'] = res.status;
+    err['statusText'] = res.statusText;
+    throw err;
+  }
+  return res.text();
+}
+
+/**
  * Performs a POST request to the Raindrop API with the given path and JSON body.
  *
  * @param {string} path - The API path (with or without leading slash), e.g. "/raindrop".
