@@ -8,30 +8,30 @@ A tiny helper with one cuddly purpose: **sync your Raindrop.io collections and b
 
 ---
 
-## 🚀 What’s New (v1.37.0)
+## 🚀 What’s New
 
-* 🌲 **Refined syncing engine:** Smoother, more reliable two-way syncing (cloud <--> local bookmarks bar).
-* 🐾 **Custom icon actions:** Choose what single or double-click does—sync, save, open options, or just chill!
-* ✨ **Brand new Options UI:** Clean, modern, and super easy to use!
-* 💬 **Sync notifications:** Get an optional cute “done!” or “oops!” toast after every sync.
-* 🐻‍❄️ **New icon & visuals:** Extra adorable for your toolbar!
+- 🪟 **New toolbar popup:** One-click actions for Sync, Save to Unsorted, Save as Project (highlighted tabs or entire window), and Recover projects
+- 💾 **Saved Projects:** Capture a set of tabs as a named project under a special Raindrop group "Saved Projects" and reopen later from the popup
+- 🛡️ **Smarter sync:** The "Saved Projects" group is excluded from local bookmarks mirroring (kept cloud‑only), reducing clutter
+- ✨ **Options UI & notifications:** Clean setup flow and optional success/failure toast after sync
 
 ---
 
 ## Get it
 
-* **Chrome Web Store:** [Raindrop Bear](https://chromewebstore.google.com/detail/raindrop-bear/gkcgbmlbjcdmnifhcmfgkafekaohjcof)
+- **Chrome Web Store:** [Raindrop Bear](https://chromewebstore.google.com/detail/raindrop-bear/gkcgbmlbjcdmnifhcmfgkafekaohjcof)
 
 ---
 
 ## What it does
 
-* **Two-way sync:** Raindrop ↔ your local browser bookmarks (NEW: now supports both directions, not just one-way!)
-* Creates a `Raindrop` folder in your Bookmarks Bar, mirroring your groups and collections
-* Keeps things fresh automatically every \~10 minutes (or manually by clicking the icon)
-* **Customizable click actions:** Set what happens when you single/double-click the toolbar icon (NEW)
-* **Optional notifications:** Cute toast after every sync (NEW)
-* **Modern Options UI:** For easier setup and customization (NEW)
+- **Two-way sync:** Raindrop ↔ your local browser bookmarks (bi‑directional updates under the managed `Raindrop` folder)
+- Creates a `Raindrop` folder in your Bookmarks Bar, mirroring your groups and collections
+- Keeps things fresh automatically every \~10 minutes, or run a manual sync from the popup
+- **Save to Unsorted:** From the popup, send the current/highlighted tabs to Raindrop’s Unsorted
+- **Saved Projects:** Save highlighted tabs or the entire current window as a project in Raindrop → later, recover it from the popup (restores grouping/order)
+- **Optional notifications:** Cute toast after every sync
+- **Modern Options UI:** Simple, clean setup
 
 ---
 
@@ -49,30 +49,32 @@ A tiny helper with one cuddly purpose: **sync your Raindrop.io collections and b
 1. Open the extension Options
 2. Paste your Raindrop API token
 
-   * Find/generate: `https://app.raindrop.io/settings/integrations`
+   - Find/generate: `https://app.raindrop.io/settings/integrations`
+
 3. Save — your bookmarks will start syncing into the `Raindrop` folder ✨
 
 ---
 
 ## How sync works
 
-* Runs every \~10 minutes in the background
-* Mirrors Raindrop groups → top-level folders; collections → subfolders
-* Adds/updates bookmarks; removes ones you’ve trashed in Raindrop
-* “Unsorted” items go into an `Unsorted` folder under `Raindrop`
-* **Now two-way:** Changes sync both ways for full reliability (NEW)
-* Strictly edits the `Raindrop` folder—editing other local bookmarks won’t affect your cloud
+- Runs every \~10 minutes in the background
+- Mirrors Raindrop groups → top-level folders; collections → subfolders
+- Adds/updates bookmarks; removes ones you’ve trashed in Raindrop
+- “Unsorted” items go into an `Unsorted` folder under `Raindrop`
+- **Two-way:** Changes sync both ways for reliability (under the managed `Raindrop` folder)
+- **Excludes Saved Projects:** Items under the Raindrop group `Saved Projects` stay in the cloud and are not mirrored locally
+- Strictly edits the `Raindrop` folder—editing other local bookmarks won’t affect your cloud
 
 ---
 
 ## Permissions & privacy
 
-* **bookmarks**: create/update folders and bookmarks for sync
-* **storage** and **unlimitedStorage**: save lightweight sync state locally
-* **notifications**: optional “sync done/failed” toasts
-* **alarms**: schedule periodic syncs
-* **tabs**: optional “Save to Raindrop” action (if you choose it in Options)
-* **Host**: `https://api.raindrop.io/*` only
+- **bookmarks**: create/update folders and bookmarks for sync
+- **storage** and **unlimitedStorage**: save lightweight sync state locally
+- **notifications**: optional “sync done/failed” toasts
+- **alarms**: schedule periodic syncs
+- **tabs**: used by popup actions to save current/highlighted tabs and to recover Saved Projects into windows
+- **Host**: `https://api.raindrop.io/*` only
 
 Privacy promise: your API token stays **local**. No analytics. No tracking. Just syncing. 💙
 
@@ -80,9 +82,9 @@ Privacy promise: your API token stays **local**. No analytics. No tracking. Just
 
 ## Tips
 
-* Click the extension icon to trigger a manual sync, **or set custom actions in Options** (NEW)
-* If you delete the `Raindrop` folder, the next sync will safely recreate it
-* Enable or disable sync notifications in Options
+- Click the toolbar icon to open the popup: Sync now, Save to Unsorted, Save as Project, or Recover a project
+- If you delete the `Raindrop` folder, the next sync will safely recreate it
+- Enable or disable sync notifications in Options
 
 ---
 
@@ -90,4 +92,4 @@ Privacy promise: your API token stays **local**. No analytics. No tracking. Just
 
 MIT
 **Changelog:**
-See [Release v1.37.0](https://github.com/riiiiiiiiiina0/raindrop-bear-v2/releases/tag/v1.37.0) for more details!
+See Releases on GitHub: https://github.com/riiiiiiiiiina0/raindrop-bear-v2/releases
