@@ -8,9 +8,6 @@
   const saveProjectBtn = /** @type {HTMLButtonElement|null} */ (
     document.getElementById('save-project-btn')
   );
-  const saveWindowProjectBtn = /** @type {HTMLButtonElement|null} */ (
-    document.getElementById('save-window-project-btn')
-  );
   const syncWindowProjectBtn = /** @type {HTMLButtonElement|null} */ (
     document.getElementById('sync-window-project-btn')
   );
@@ -25,7 +22,6 @@
     !(syncBtn instanceof HTMLButtonElement) ||
     !(saveBtn instanceof HTMLButtonElement) ||
     !(saveProjectBtn instanceof HTMLButtonElement) ||
-    !(saveWindowProjectBtn instanceof HTMLButtonElement) ||
     !(syncWindowProjectBtn instanceof HTMLButtonElement)
   )
     return;
@@ -135,8 +131,7 @@
       count === 1 ? '📥 Save to unsorted' : `📥 Save ${count} tabs to unsorted`;
     saveProjectBtn.textContent =
       count === 1 ? '🔼 Save as project' : `🔼 Save ${count} tabs as project`;
-    saveWindowProjectBtn.textContent = '⏫ Save current window as project';
-    syncWindowProjectBtn.textContent = '🔄️ Sync current window as project';
+    syncWindowProjectBtn.textContent = '⏫ Sync current window as project';
 
     // Load saved projects list
     try {
@@ -198,52 +193,6 @@
             const right = document.createElement('div');
             right.className = 'flex items-center gap-1';
 
-            const replaceWithCurrentWindowBtn =
-              document.createElement('button');
-            replaceWithCurrentWindowBtn.type = 'button';
-            replaceWithCurrentWindowBtn.title =
-              'Replace with current window tabs';
-            replaceWithCurrentWindowBtn.textContent = '⏫';
-            replaceWithCurrentWindowBtn.className =
-              'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
-            replaceWithCurrentWindowBtn.addEventListener('click', async (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              const ok = confirm(
-                `Replace saved project "${String(
-                  it.title || 'Untitled',
-                )}" with current window tabs?`,
-              );
-              if (!ok) return;
-              disableAllButtons();
-              setStatus('Replacing…');
-              await sendCommand('replaceSavedProjectWithCurrentWindowTabs', {
-                id: it.id,
-              });
-              window.close();
-            });
-
-            const replaceWithSelectedTabsBtn = document.createElement('button');
-            replaceWithSelectedTabsBtn.type = 'button';
-            replaceWithSelectedTabsBtn.title = 'Replace with selected tabs';
-            replaceWithSelectedTabsBtn.textContent = '🔼';
-            replaceWithSelectedTabsBtn.className =
-              'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
-            replaceWithSelectedTabsBtn.addEventListener('click', async (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              const ok = confirm(
-                `Replace saved project "${String(
-                  it.title || 'Untitled',
-                )}" with selected tabs?`,
-              );
-              if (!ok) return;
-              disableAllButtons();
-              setStatus('Replacing…');
-              await sendCommand('replaceSavedProject', { id: it.id });
-              window.close();
-            });
-
             const deleteBtn = document.createElement('button');
             deleteBtn.type = 'button';
             deleteBtn.title = 'Delete';
@@ -264,14 +213,10 @@
             });
 
             function disableAllButtons() {
-              replaceWithCurrentWindowBtn.disabled = true;
-              replaceWithSelectedTabsBtn.disabled = true;
               deleteBtn.disabled = true;
               li.classList.add('opacity-60');
             }
 
-            right.appendChild(replaceWithCurrentWindowBtn);
-            right.appendChild(replaceWithSelectedTabsBtn);
             right.appendChild(deleteBtn);
 
             li.appendChild(left);
@@ -313,23 +258,6 @@
     }
     setStatus('');
     saveProjectBtn.disabled = false;
-    window.close();
-  });
-
-  saveWindowProjectBtn.addEventListener('click', async () => {
-    saveWindowProjectBtn.disabled = true;
-    setStatus('Saving');
-    const suggested = await computeSuggestedProjectName({
-      highlightedOnly: false,
-    });
-    const name = prompt('Project name?', suggested || undefined);
-    if (name && name.trim()) {
-      await sendCommand('saveCurrentWindowAsProject', {
-        name: name.trim(),
-      });
-    }
-    setStatus('');
-    saveWindowProjectBtn.disabled = false;
     window.close();
   });
 

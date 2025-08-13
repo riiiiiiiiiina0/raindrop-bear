@@ -25,6 +25,8 @@ import {
 const ALARM_NAME = 'raindrop-sync';
 const SYNC_PERIOD_MINUTES = 10;
 const BADGE_CLEAR_ALARM = 'raindrop-clear-badge';
+// When true, disables mirroring of local bookmark changes back to Raindrop (one-way Raindrop → local)
+const ONE_WAY_RAINDROP_TO_LOCAL = true;
 
 const STORAGE_KEYS = {
   lastSync: 'lastSync',
@@ -279,6 +281,10 @@ function clearBadge() {
   try {
     chrome.action?.setBadgeText({ text: '' });
   } catch (_) {}
+  // After temporary badges are cleared, restore window-sync indicator if applicable
+  try {
+    restoreActionUiForActiveWindow();
+  } catch (_) {}
 }
 
 function scheduleClearBadge(delayMs) {
@@ -293,13 +299,76 @@ function scheduleClearBadge(delayMs) {
   } catch (_) {}
 }
 
-/**
- * Show a notification prompting the user to configure their Raindrop API token.
- * Clicking the notification opens the extension Options page.
- * Debounced to avoid spamming.
- * @param {string} message
- */
-// notification helper moved to modules/notifications
+// Notification helpers are provided by modules/notifications
+
+// ===== Action Title + Window-Sync UI =====
+function setActionTitle(title) {
+  try {
+    chrome.action?.setTitle({ title: String(title || '') });
+  } catch (_) {}
+}
+
+function projectNameWithoutPrefix(name) {
+  const s = String(name || '');
+  // Strip leading sync emoji + space if present ("⏫ " or "🔄 ")
+  return s.replace(/^\s*⏫?\s+/, '');
+}
+
+async function restoreActionUiForActiveWindow() {
+  try {
+    // Determine the currently focused/active window
+    let winId = null;
+    try {
+      const tabs = await new Promise((resolve) =>
+        chrome.tabs.query({ active: true, lastFocusedWindow: true }, (ts) =>
+          resolve(ts || []),
+        ),
+      );
+      const t = Array.isArray(tabs) && tabs.length ? tabs[0] : null;
+      if (t && t.windowId != null) winId = Number(t.windowId);
+    } catch (_) {}
+    if (!Number.isFinite(winId)) {
+      try {
+        const w = await new Promise((resolve) =>
+          chrome.windows.getLastFocused({ windowTypes: ['normal'] }, (ww) =>
+            resolve(ww || null),
+          ),
+        );
+        if (w && w.id != null) winId = Number(w.id);
+      } catch (_) {}
+    }
+
+    // Avoid overriding an active temporary badge (e.g., ✔️/😵/⬆️/💾) —
+    // only set our persistent sync badge when no other badge is showing or
+    // when our desired badge is already set.
+    let currentBadge = '';
+    try {
+      currentBadge = await new Promise((resolve) =>
+        chrome.action?.getBadgeText({}, (text) => resolve(text || '')),
+      );
+    } catch (_) {}
+
+    const sess = windowSyncSessions.get(Number(winId));
+    if (sess && !sess.stopped) {
+      const wants = '⏫';
+      if (!currentBadge || currentBadge === wants) {
+        setBadge(wants, '#38bdf8');
+      }
+      const pn = projectNameWithoutPrefix(sess.name || '');
+      setActionTitle(
+        pn
+          ? `Tabs in this window is syncing to ${pn}`
+          : 'This window is syncing to a Saved Project',
+      );
+    } else {
+      setActionTitle('Raindrop Bear');
+      // Ensure persistent window-sync badge is cleared when current window is not syncing
+      if (currentBadge === '⏫') {
+        setBadge('');
+      }
+    }
+  } catch (_) {}
+}
 
 // ===== Storage Helpers =====
 /**
@@ -1183,7 +1252,8 @@ async function resolveParentCollectionId(parentFolderId, state) {
 // ===== Local → Raindrop event mirroring =====
 chrome.bookmarks?.onCreated.addListener(async (id, node) => {
   try {
-    if (isSyncing || suppressLocalBookmarkEvents) return;
+    if (ONE_WAY_RAINDROP_TO_LOCAL || isSyncing || suppressLocalBookmarkEvents)
+      return;
     // If this bookmark was just created locally as a result of our own remote save, skip mirroring
     if (node && node.url && recentlyCreatedRemoteUrls.has(String(node.url))) {
       return;
@@ -1255,7 +1325,8 @@ chrome.bookmarks?.onCreated.addListener(async (id, node) => {
 
 chrome.bookmarks?.onRemoved.addListener(async (id, removeInfo) => {
   try {
-    if (isSyncing || suppressLocalBookmarkEvents) return;
+    if (ONE_WAY_RAINDROP_TO_LOCAL || isSyncing || suppressLocalBookmarkEvents)
+      return;
     const state = await loadState();
     // If our managed root folder is missing, skip mirroring deletions (likely user removed the whole tree)
     if (state.rootFolderId) {
@@ -1293,7 +1364,8 @@ chrome.bookmarks?.onRemoved.addListener(async (id, removeInfo) => {
 
 chrome.bookmarks?.onChanged.addListener(async (id, changeInfo) => {
   try {
-    if (isSyncing || suppressLocalBookmarkEvents) return;
+    if (ONE_WAY_RAINDROP_TO_LOCAL || isSyncing || suppressLocalBookmarkEvents)
+      return;
     const state = await loadState();
     const itemMap = { ...(state.itemMap || {}) };
     const collectionMap = { ...(state.collectionMap || {}) };
@@ -1328,7 +1400,8 @@ chrome.bookmarks?.onChanged.addListener(async (id, changeInfo) => {
 
 chrome.bookmarks?.onMoved.addListener(async (id, moveInfo) => {
   try {
-    if (isSyncing || suppressLocalBookmarkEvents) return;
+    if (ONE_WAY_RAINDROP_TO_LOCAL || isSyncing || suppressLocalBookmarkEvents)
+      return;
     const state = await loadState();
     const rootFolderId = state.rootFolderId;
     if (!rootFolderId) return;
@@ -1519,6 +1592,9 @@ async function performSync() {
       setBadge('😵', '#ef4444'); // Tailwind red-500
       scheduleClearBadge(3000);
     }
+    try {
+      restoreActionUiForActiveWindow();
+    } catch (_) {}
     if (didSucceed && notifyPref && hasAnyChanges) {
       try {
         notifySyncSuccess('Sync completed successfully.');
@@ -1558,7 +1634,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   }
 });
 
-// ===== Live Sync: Current window -> Saved Project "🔄️ <name>" =====
+// ===== Live Sync: Current window -> Saved Project "⏫ <name>" =====
 
 /** @typedef {{ collectionId: number, windowId: number, name: string, stopped?: boolean }} WindowSyncSession */
 /** @type {Map<number, WindowSyncSession>} */
@@ -1599,6 +1675,9 @@ async function persistActiveSyncSessions() {
 // Initialize from storage on service worker start
 (async () => {
   await loadActiveSyncSessionsIntoMemory();
+  try {
+    restoreActionUiForActiveWindow();
+  } catch (_) {}
 })();
 
 /**
@@ -1611,8 +1690,16 @@ async function persistActiveSyncSessions() {
 async function startSyncCurrentWindowAsProject(projectName, windowId) {
   const rawName = String(projectName || '').trim();
   if (!rawName || !Number.isFinite(Number(windowId))) return;
-  const syncTitle = `🔄️ ${rawName}`;
+  const syncTitle = `⏫ ${rawName}`;
   setBadge('🔄', '#6366f1'); // indigo-500
+  try {
+    const pn = projectNameWithoutPrefix(syncTitle);
+    setActionTitle(
+      pn
+        ? `Tabs in this window is syncing to ${pn}`
+        : 'This window is syncing to a Saved Project',
+    );
+  } catch (_) {}
   try {
     // Ensure Saved Projects group exists and create a new root collection
     const collectionId = await createCollectionUnderSavedProjects(syncTitle);
@@ -1631,6 +1718,9 @@ async function startSyncCurrentWindowAsProject(projectName, windowId) {
     setBadge('✔️', '#22c55e');
     scheduleClearBadge(2000);
     try {
+      restoreActionUiForActiveWindow();
+    } catch (_) {}
+    try {
       notify(`Sync started: ${syncTitle}`);
     } catch (_) {}
   } catch (e) {
@@ -1639,7 +1729,47 @@ async function startSyncCurrentWindowAsProject(projectName, windowId) {
     try {
       notify(`Failed to start sync: ${e}`);
     } catch (_) {}
+    try {
+      restoreActionUiForActiveWindow();
+    } catch (_) {}
   }
+}
+
+/**
+ * Starts syncing an existing Saved Project collection with a browser window.
+ * Does not create a new collection; instead, it registers a session that
+ * will continuously override the project's items from the window's tabs.
+ * @param {number} collectionId
+ * @param {string} projectName
+ * @param {number} windowId
+ */
+async function startSyncWindowToExistingProject(
+  collectionId,
+  projectName,
+  windowId,
+) {
+  const colId = Number(collectionId);
+  const winId = Number(windowId);
+  if (!Number.isFinite(colId) || !Number.isFinite(winId)) return;
+  const name = String(projectName || '');
+  try {
+    windowSyncSessions.set(winId, {
+      collectionId: colId,
+      windowId: winId,
+      name,
+    });
+    await persistActiveSyncSessions();
+  } catch (_) {}
+  try {
+    // Schedule an initial sync shortly after restore to capture any immediate changes
+    scheduleWindowSync(winId, 1500);
+  } catch (_) {}
+  try {
+    restoreActionUiForActiveWindow();
+  } catch (_) {}
+  try {
+    notify(`Sync started: ${name || 'Project'}`);
+  } catch (_) {}
 }
 
 /**
@@ -1750,14 +1880,15 @@ async function overrideCollectionWithWindowTabs(collectionId, windowId) {
     throw e;
   }
 
+  // Build next state from window tabs first. If nothing to save, do not clear
+  // the existing collection so we don't wipe items when the window closes.
+  const itemsToSave = await buildItemsFromWindowTabs(windowId);
+  if (itemsToSave.length === 0) return;
+
   // Fast clear: move all items in the collection to Trash in one call
   try {
     await apiDELETE(`/raindrops/${encodeURIComponent(Number(collectionId))}`);
   } catch (_) {}
-
-  // Recreate items from window
-  const itemsToSave = await buildItemsFromWindowTabs(windowId);
-  if (itemsToSave.length === 0) return;
   try {
     await apiPOST('/raindrops', {
       items: itemsToSave.map((it) => ({
@@ -1814,12 +1945,18 @@ chrome.tabs?.onCreated.addListener((tab) => {
     if (!windowSyncSessions.has(Number(winId))) return;
     scheduleWindowSync(Number(winId));
   } catch (_) {}
+  try {
+    restoreActionUiForActiveWindow();
+  } catch (_) {}
 });
 chrome.tabs?.onRemoved.addListener((_tabId, removeInfo) => {
   try {
     const winId = removeInfo && removeInfo.windowId;
     if (!windowSyncSessions.has(Number(winId))) return;
     scheduleWindowSync(Number(winId));
+  } catch (_) {}
+  try {
+    restoreActionUiForActiveWindow();
   } catch (_) {}
 });
 chrome.tabs?.onUpdated.addListener((_tabId, changeInfo, tab) => {
@@ -1835,12 +1972,21 @@ chrome.tabs?.onUpdated.addListener((_tabId, changeInfo, tab) => {
       scheduleWindowSync(Number(winId));
     }
   } catch (_) {}
+  // Keep action UI in sync as active tab/window changes
+  try {
+    if (changeInfo && changeInfo.status === 'complete') {
+      restoreActionUiForActiveWindow();
+    }
+  } catch (_) {}
 });
 chrome.tabs?.onMoved.addListener((_tabId, moveInfo) => {
   try {
     const winId = moveInfo && moveInfo.windowId;
     if (!windowSyncSessions.has(Number(winId))) return;
     scheduleWindowSync(Number(winId));
+  } catch (_) {}
+  try {
+    restoreActionUiForActiveWindow();
   } catch (_) {}
 });
 chrome.tabs?.onAttached.addListener((_tabId, attachInfo) => {
@@ -1849,12 +1995,35 @@ chrome.tabs?.onAttached.addListener((_tabId, attachInfo) => {
     if (!windowSyncSessions.has(Number(winId))) return;
     scheduleWindowSync(Number(winId));
   } catch (_) {}
+  try {
+    restoreActionUiForActiveWindow();
+  } catch (_) {}
 });
 chrome.tabs?.onDetached.addListener((_tabId, detachInfo) => {
   try {
     const winId = detachInfo && detachInfo.oldWindowId;
     if (!windowSyncSessions.has(Number(winId))) return;
     scheduleWindowSync(Number(winId));
+  } catch (_) {}
+  try {
+    restoreActionUiForActiveWindow();
+  } catch (_) {}
+});
+
+// Window focus/creation → ensure badge/title reflect the focused window's sync state
+chrome.windows?.onFocusChanged?.addListener((_windowId) => {
+  try {
+    restoreActionUiForActiveWindow();
+  } catch (_) {}
+});
+chrome.windows?.onCreated?.addListener((_window) => {
+  try {
+    restoreActionUiForActiveWindow();
+  } catch (_) {}
+});
+chrome.tabs?.onActivated?.addListener((_activeInfo) => {
+  try {
+    restoreActionUiForActiveWindow();
   } catch (_) {}
 });
 
@@ -1864,17 +2033,26 @@ chrome.tabGroups?.onCreated?.addListener((_group) => {
     for (const winId of windowSyncSessions.keys())
       scheduleWindowSync(Number(winId));
   } catch (_) {}
+  try {
+    restoreActionUiForActiveWindow();
+  } catch (_) {}
 });
 chrome.tabGroups?.onUpdated?.addListener((_group) => {
   try {
     for (const winId of windowSyncSessions.keys())
       scheduleWindowSync(Number(winId));
   } catch (_) {}
+  try {
+    restoreActionUiForActiveWindow();
+  } catch (_) {}
 });
 chrome.tabGroups?.onRemoved?.addListener((_group) => {
   try {
     for (const winId of windowSyncSessions.keys())
       scheduleWindowSync(Number(winId));
+  } catch (_) {}
+  try {
+    restoreActionUiForActiveWindow();
   } catch (_) {}
 });
 
@@ -1883,12 +2061,18 @@ chrome.windows?.onRemoved.addListener((windowId) => {
   try {
     stopWindowSync(Number(windowId));
   } catch (_) {}
+  try {
+    restoreActionUiForActiveWindow();
+  } catch (_) {}
 });
 chrome.runtime.onStartup?.addListener(() => {
   try {
     chrome.alarms.create(ALARM_NAME, { periodInMinutes: SYNC_PERIOD_MINUTES });
   } catch (_) {}
   // Popup handles interactions; nothing to update here
+  try {
+    restoreActionUiForActiveWindow();
+  } catch (_) {}
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -1915,6 +2099,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
       } catch (_) {}
     })();
   }
+  // After any alarm, ensure persistent UI is restored if needed
+  try {
+    restoreActionUiForActiveWindow();
+  } catch (_) {}
 });
 
 // Popup commands → message listener
@@ -1934,24 +2122,47 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message && message.type === 'recoverSavedProject') {
         const id = message && message.id;
         await recoverSavedProject(id);
+        // If the recovered project's title starts with the sync emoji, begin a live sync
+        try {
+          const colId = Number(id);
+          if (Number.isFinite(colId)) {
+            // Fetch title to check prefix and to pass exact name
+            const res = await apiGET(
+              `/collection/${encodeURIComponent(colId)}`,
+            );
+            const item = (res && (res.item || res.data || res)) || {};
+            const title = String(item.title || '');
+            const shouldSync = /^\s*⏫?\s+/.test(title);
+            if (shouldSync) {
+              // Resolve a new normal window (the one we just created)
+              let winId = null;
+              try {
+                const normals = await new Promise((resolve) =>
+                  chrome.windows.getAll({ windowTypes: ['normal'] }, (ws) =>
+                    resolve(ws || []),
+                  ),
+                );
+                if (Array.isArray(normals) && normals.length) {
+                  // Assume the last focused is the newly created one
+                  const lastFocused =
+                    normals.find((w) => w.focused) || normals[0];
+                  winId = lastFocused && lastFocused.id;
+                }
+              } catch (_) {}
+              if (Number.isFinite(Number(winId))) {
+                await startSyncWindowToExistingProject(
+                  colId,
+                  title,
+                  Number(winId),
+                );
+              }
+            }
+          }
+        } catch (_) {}
         sendResponse({ ok: true });
         return;
       }
-      if (message && message.type === 'replaceSavedProject') {
-        const id = message && message.id;
-        await replaceSavedProject(id);
-        sendResponse({ ok: true });
-        return;
-      }
-      if (
-        message &&
-        message.type === 'replaceSavedProjectWithCurrentWindowTabs'
-      ) {
-        const id = message && message.id;
-        await replaceSavedProjectWithCurrentWindowTabs(id);
-        sendResponse({ ok: true });
-        return;
-      }
+      // removed: replaceSavedProject, replaceSavedProjectWithCurrentWindowTabs
       if (message && message.type === 'deleteSavedProject') {
         const id = message && message.id;
         await deleteSavedProject(id);
@@ -1972,12 +2183,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: true });
         return;
       }
-      if (message && message.type === 'saveCurrentWindowAsProject') {
-        const projectName = (message && message.name) || '';
-        await saveCurrentWindowAsProject(projectName);
-        sendResponse({ ok: true });
-        return;
-      }
+      // removed: saveCurrentWindowAsProject
       if (message && message.type === 'startSyncCurrentWindowAsProject') {
         const projectName = (message && message.name) || '';
         // Resolve the real browser window id reliably (avoid the popup window id)
@@ -2136,6 +2342,9 @@ async function saveCurrentOrHighlightedTabsToRaindrop() {
     try {
       notify('Failed to save tab(s) to Raindrop');
     } catch (_) {}
+    try {
+      restoreActionUiForActiveWindow();
+    } catch (_) {}
   }
 }
 
@@ -2161,21 +2370,6 @@ async function saveHighlightedTabsAsProject(projectName) {
         (ts) => resolve(ts || []),
       ),
     );
-  await saveTabsListAsProject(name, tabsList || []);
-}
-
-/**
- * Save all tabs in the current window as a project with the provided name.
- * @param {string} projectName
- */
-async function saveCurrentWindowAsProject(projectName) {
-  const name = String(projectName || '').trim();
-  if (!name) return;
-  const tabsList = await new Promise((resolve) =>
-    chrome.tabs.query({ windowId: chrome.windows.WINDOW_ID_CURRENT }, (ts) =>
-      resolve(ts || []),
-    ),
-  );
   await saveTabsListAsProject(name, tabsList || []);
 }
 
@@ -2325,6 +2519,9 @@ async function saveTabsListAsProject(name, tabsList) {
     scheduleClearBadge(3000);
     try {
       notify(`Failed to save project: ${e}`);
+    } catch (_) {}
+    try {
+      restoreActionUiForActiveWindow();
     } catch (_) {}
   }
 }
@@ -2496,7 +2693,7 @@ async function recoverSavedProject(collectionId) {
         pinned: it.meta?.pinned ?? false,
       });
 
-      if (newTab && newTab.id && it.meta?.tabGroup) {
+      if (newTab && newTab.id && it.meta?.tabGroup !== null) {
         let group = tabGroups.find(
           (g) => g.meta.tabGroup === it.meta?.tabGroup,
         );
@@ -2673,77 +2870,6 @@ async function replaceSavedProjectWithTabs(collectionId, tabsList) {
 }
 
 /**
- * Replace an existing Saved Project collection with the currently highlighted tabs.
- * Keeps the same title and position in the Saved Projects group ordering.
- * @param {number|string} collectionId
- */
-async function replaceSavedProject(collectionId) {
-  setBadge('🔼', '#f59e0b');
-  try {
-    /** @type {chrome.tabs.Tab[]} */
-    const highlightedTabs = await new Promise((resolve) =>
-      chrome.tabs.query(
-        { windowId: chrome.windows.WINDOW_ID_CURRENT, highlighted: true },
-        (ts) => resolve(ts || []),
-      ),
-    );
-    const { title, count } = await replaceSavedProjectWithTabs(
-      collectionId,
-      highlightedTabs || [],
-    );
-    setBadge('✔️', '#22c55e');
-    scheduleClearBadge(3000);
-    try {
-      notify(
-        `Replaced project "${title}" with ${count} tab${count > 1 ? 's' : ''}`,
-      );
-    } catch (_) {}
-  } catch (e) {
-    setBadge('😵', '#ef4444');
-    scheduleClearBadge(3000);
-    try {
-      notify(`Failed to replace project: ${e}`);
-    } catch (_) {}
-  }
-}
-
-/**
- * Replace an existing Saved Project collection with all tabs from the current window.
- * Keeps the same title and position in the Saved Projects group ordering.
- * @param {number|string} collectionId
- */
-async function replaceSavedProjectWithCurrentWindowTabs(collectionId) {
-  setBadge('⏫', '#f59e0b');
-  try {
-    /** @type {chrome.tabs.Tab[]} */
-    const windowTabs = await new Promise((resolve) =>
-      chrome.tabs.query({ windowId: chrome.windows.WINDOW_ID_CURRENT }, (ts) =>
-        resolve(ts || []),
-      ),
-    );
-    const { title, count } = await replaceSavedProjectWithTabs(
-      collectionId,
-      windowTabs || [],
-    );
-    setBadge('✔️', '#22c55e');
-    scheduleClearBadge(3000);
-    try {
-      notify(
-        `Replaced project "${title}" with ${count} tab${
-          count > 1 ? 's' : ''
-        } from current window`,
-      );
-    } catch (_) {}
-  } catch (e) {
-    setBadge('😵', '#ef4444');
-    scheduleClearBadge(3000);
-    try {
-      notify(`Failed to replace project: ${e}`);
-    } catch (_) {}
-  }
-}
-
-/**
  * Delete a Saved Project: remove collection and update Saved Projects group ordering.
  * @param {number|string} collectionId
  */
@@ -2796,6 +2922,9 @@ async function deleteSavedProject(collectionId) {
     scheduleClearBadge(3000);
     try {
       notify(`Failed to delete project: ${e}`);
+    } catch (_) {}
+    try {
+      restoreActionUiForActiveWindow();
     } catch (_) {}
   }
 }
