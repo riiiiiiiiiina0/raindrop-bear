@@ -1558,6 +1558,332 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   }
 });
 
+// ===== Live Sync: Current window -> Saved Project "🔄️ <name>" =====
+
+/** @typedef {{ collectionId: number, windowId: number, name: string, stopped?: boolean }} WindowSyncSession */
+/** @type {Map<number, WindowSyncSession>} */
+const windowSyncSessions = new Map();
+const ACTIVE_SYNC_SESSIONS_KEY = 'activeWindowSyncSessions'; // { [windowId: string]: { collectionId: number, name: string } }
+const WINDOW_SYNC_ALARM_PREFIX = 'raindrop-window-sync-';
+
+async function loadActiveSyncSessionsIntoMemory() {
+  try {
+    const data = await chromeP.storageGet(ACTIVE_SYNC_SESSIONS_KEY);
+    const saved = data && data[ACTIVE_SYNC_SESSIONS_KEY];
+    const obj = saved && typeof saved === 'object' ? saved : {};
+    windowSyncSessions.clear();
+    for (const [k, v] of Object.entries(obj)) {
+      const winId = Number(k);
+      const collectionId = Number(v && v.collectionId);
+      const name = String(v && v.name) || '';
+      if (!Number.isFinite(winId) || !Number.isFinite(collectionId)) continue;
+      windowSyncSessions.set(winId, {
+        collectionId,
+        windowId: winId,
+        name,
+      });
+    }
+  } catch (_) {}
+}
+
+async function persistActiveSyncSessions() {
+  const obj = {};
+  for (const [winId, sess] of windowSyncSessions.entries()) {
+    obj[String(winId)] = { collectionId: sess.collectionId, name: sess.name };
+  }
+  try {
+    await chromeP.storageSet({ [ACTIVE_SYNC_SESSIONS_KEY]: obj });
+  } catch (_) {}
+}
+
+// Initialize from storage on service worker start
+(async () => {
+  await loadActiveSyncSessionsIntoMemory();
+})();
+
+/**
+ * Creates a collection titled with a sync prefix under Saved Projects and seeds it
+ * with current window tabs, then starts listening to window/tab/group changes
+ * to keep the collection contents overridden with latest tabs.
+ * @param {string} projectName
+ * @param {number} windowId
+ */
+async function startSyncCurrentWindowAsProject(projectName, windowId) {
+  const rawName = String(projectName || '').trim();
+  if (!rawName || !Number.isFinite(Number(windowId))) return;
+  const syncTitle = `🔄️ ${rawName}`;
+  setBadge('🔄', '#6366f1'); // indigo-500
+  try {
+    // Ensure Saved Projects group exists and create a new root collection
+    const collectionId = await createCollectionUnderSavedProjects(syncTitle);
+
+    // Initial seed with current window tabs
+    await overrideCollectionWithWindowTabs(collectionId, Number(windowId));
+
+    // Register session in memory
+    windowSyncSessions.set(Number(windowId), {
+      collectionId: Number(collectionId),
+      windowId: Number(windowId),
+      name: syncTitle,
+    });
+    await persistActiveSyncSessions();
+
+    setBadge('✔️', '#22c55e');
+    scheduleClearBadge(2000);
+    try {
+      notify(`Sync started: ${syncTitle}`);
+    } catch (_) {}
+  } catch (e) {
+    setBadge('😵', '#ef4444');
+    scheduleClearBadge(3000);
+    try {
+      notify(`Failed to start sync: ${e}`);
+    } catch (_) {}
+  }
+}
+
+/**
+ * Ensure Saved Projects group exists and create a collection with the provided title,
+ * then put it at the front of that group's collections ordering.
+ * @param {string} title
+ * @returns {Promise<number>} collection id
+ */
+async function createCollectionUnderSavedProjects(title) {
+  const userRes = await apiGET('/user');
+  const groups = Array.isArray(userRes?.user?.groups)
+    ? userRes.user.groups
+    : [];
+  const savedTitle = 'Saved Projects';
+  let groupsArray = groups.slice();
+  let idx = groupsArray.findIndex((g) => (g && g.title) === savedTitle);
+  if (idx === -1) {
+    groupsArray = groupsArray.concat({
+      title: savedTitle,
+      hidden: false,
+      sort: groupsArray.length,
+      collections: [],
+    });
+    try {
+      await apiPUT('/user', { groups: groupsArray });
+    } catch (_) {}
+    try {
+      const uu = await apiGET('/user');
+      groupsArray = Array.isArray(uu?.user?.groups)
+        ? uu.user.groups
+        : groupsArray;
+    } catch (_) {}
+    idx = groupsArray.findIndex((g) => (g && g.title) === savedTitle);
+  }
+
+  // Create collection
+  const created = await apiPOST('/collection', { title });
+  const createdItem = created && (created.item || created.data || created);
+  const collectionId = createdItem && (createdItem._id ?? createdItem.id);
+  if (collectionId == null) throw new Error('Failed to create collection');
+
+  // Put at front
+  try {
+    const newGroups = groupsArray.slice();
+    const entry = {
+      ...(newGroups[idx] || { title: savedTitle, collections: [] }),
+    };
+    const cols = Array.isArray(entry.collections)
+      ? entry.collections.slice()
+      : [];
+    const filtered = cols.filter((cid) => Number(cid) !== Number(collectionId));
+    entry.collections = [Number(collectionId), ...filtered];
+    newGroups[idx] = entry;
+    await apiPUT('/user', { groups: newGroups });
+  } catch (_) {}
+  return Number(collectionId);
+}
+
+/**
+ * Build raindrop items array from tabs in a window, preserving order and metadata.
+ * @param {number} windowId
+ */
+async function buildItemsFromWindowTabs(windowId) {
+  /** @type {chrome.tabs.Tab[]} */
+  const tabsList = await new Promise((resolve) =>
+    chrome.tabs.query({ windowId: Number(windowId) }, (ts) =>
+      resolve(ts || []),
+    ),
+  );
+  /** @type {chrome.tabGroups.TabGroup[]} */
+  const groupsInWindow = await new Promise((resolve) =>
+    chrome.tabGroups?.query({ windowId: Number(windowId) }, (gs) =>
+      resolve(gs || []),
+    ),
+  );
+  const groupMap = new Map();
+  (groupsInWindow || []).forEach((g) => groupMap.set(g.id, g));
+  const eligible = (tabsList || []).filter(
+    (t) =>
+      t.url && (t.url.startsWith('https://') || t.url.startsWith('http://')),
+  );
+  return eligible.map((t, i) => {
+    const baseTitle = t.title || t.url || '';
+    const group = groupMap.get(t.groupId) || null;
+    const meta = {
+      index: i,
+      pinned: t.pinned,
+      tabGroup: group && group.title,
+      tabGroupColor: group && group.color,
+    };
+    return { link: t.url, title: baseTitle, note: JSON.stringify(meta) };
+  });
+}
+
+/**
+ * Override all items in a collection with tabs from a window. Deletes existing items
+ * and then bulk creates current items. Stops the session if collection is missing.
+ * @param {number} collectionId
+ * @param {number} windowId
+ */
+async function overrideCollectionWithWindowTabs(collectionId, windowId) {
+  // Verify collection exists
+  try {
+    await apiGET(`/collection/${encodeURIComponent(Number(collectionId))}`);
+  } catch (e) {
+    // Stop session on not found
+    stopWindowSync(windowId);
+    throw e;
+  }
+
+  // Fast clear: move all items in the collection to Trash in one call
+  try {
+    await apiDELETE(`/raindrops/${encodeURIComponent(Number(collectionId))}`);
+  } catch (_) {}
+
+  // Recreate items from window
+  const itemsToSave = await buildItemsFromWindowTabs(windowId);
+  if (itemsToSave.length === 0) return;
+  try {
+    await apiPOST('/raindrops', {
+      items: itemsToSave.map((it) => ({
+        link: it.link,
+        title: it.title,
+        note: it.note,
+        collection: { $id: Number(collectionId) },
+      })),
+    });
+  } catch (_) {
+    for (const it of itemsToSave) {
+      try {
+        await apiPOST('/raindrop', {
+          link: it.link,
+          title: it.title,
+          note: it.note,
+          collection: { $id: Number(collectionId) },
+        });
+      } catch (_) {}
+    }
+  }
+}
+
+function scheduleWindowSync(windowId, timeoutMs = 1500) {
+  const sess = windowSyncSessions.get(Number(windowId));
+  if (!sess || sess.stopped) return;
+  const name = `${WINDOW_SYNC_ALARM_PREFIX}${Number(windowId)}`;
+  try {
+    chrome.alarms.clear(name, () => {
+      try {
+        chrome.alarms.create(name, {
+          when: Date.now() + Math.max(300, Number(timeoutMs) || 1500),
+        });
+      } catch (_) {}
+    });
+  } catch (_) {}
+}
+
+function stopWindowSync(windowId) {
+  const sess = windowSyncSessions.get(Number(windowId));
+  if (!sess) return;
+  sess.stopped = true;
+  try {
+    chrome.alarms.clear(`${WINDOW_SYNC_ALARM_PREFIX}${Number(windowId)}`);
+  } catch (_) {}
+  windowSyncSessions.delete(Number(windowId));
+  persistActiveSyncSessions();
+}
+
+// Tabs change listeners → schedule sync for that window if active
+chrome.tabs?.onCreated.addListener((tab) => {
+  try {
+    const winId = tab && tab.windowId;
+    if (!windowSyncSessions.has(Number(winId))) return;
+    scheduleWindowSync(Number(winId));
+  } catch (_) {}
+});
+chrome.tabs?.onRemoved.addListener((_tabId, removeInfo) => {
+  try {
+    const winId = removeInfo && removeInfo.windowId;
+    if (!windowSyncSessions.has(Number(winId))) return;
+    scheduleWindowSync(Number(winId));
+  } catch (_) {}
+});
+chrome.tabs?.onUpdated.addListener((_tabId, changeInfo, tab) => {
+  try {
+    const winId = tab && tab.windowId;
+    if (!windowSyncSessions.has(Number(winId))) return;
+    if (
+      'url' in (changeInfo || {}) ||
+      'title' in (changeInfo || {}) ||
+      'pinned' in (changeInfo || {}) ||
+      (changeInfo && changeInfo.status === 'complete')
+    ) {
+      scheduleWindowSync(Number(winId));
+    }
+  } catch (_) {}
+});
+chrome.tabs?.onMoved.addListener((_tabId, moveInfo) => {
+  try {
+    const winId = moveInfo && moveInfo.windowId;
+    if (!windowSyncSessions.has(Number(winId))) return;
+    scheduleWindowSync(Number(winId));
+  } catch (_) {}
+});
+chrome.tabs?.onAttached.addListener((_tabId, attachInfo) => {
+  try {
+    const winId = attachInfo && attachInfo.newWindowId;
+    if (!windowSyncSessions.has(Number(winId))) return;
+    scheduleWindowSync(Number(winId));
+  } catch (_) {}
+});
+chrome.tabs?.onDetached.addListener((_tabId, detachInfo) => {
+  try {
+    const winId = detachInfo && detachInfo.oldWindowId;
+    if (!windowSyncSessions.has(Number(winId))) return;
+    scheduleWindowSync(Number(winId));
+  } catch (_) {}
+});
+
+// Tab group changes
+chrome.tabGroups?.onCreated?.addListener((_group) => {
+  try {
+    for (const winId of windowSyncSessions.keys())
+      scheduleWindowSync(Number(winId));
+  } catch (_) {}
+});
+chrome.tabGroups?.onUpdated?.addListener((_group) => {
+  try {
+    for (const winId of windowSyncSessions.keys())
+      scheduleWindowSync(Number(winId));
+  } catch (_) {}
+});
+chrome.tabGroups?.onRemoved?.addListener((_group) => {
+  try {
+    for (const winId of windowSyncSessions.keys())
+      scheduleWindowSync(Number(winId));
+  } catch (_) {}
+});
+
+// Stop syncing when window is closed
+chrome.windows?.onRemoved.addListener((windowId) => {
+  try {
+    stopWindowSync(Number(windowId));
+  } catch (_) {}
+});
 chrome.runtime.onStartup?.addListener(() => {
   try {
     chrome.alarms.create(ALARM_NAME, { periodInMinutes: SYNC_PERIOD_MINUTES });
@@ -1571,11 +1897,28 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     performSync();
   } else if (alarm && alarm.name === 'raindrop-clear-badge') {
     clearBadge();
+  } else if (
+    alarm &&
+    alarm.name &&
+    alarm.name.startsWith('raindrop-window-sync-')
+  ) {
+    const suffix = alarm.name.substring('raindrop-window-sync-'.length);
+    const winId = Number(suffix);
+    const sess = windowSyncSessions.get(Number(winId));
+    if (!sess || sess.stopped) return;
+    (async () => {
+      try {
+        await overrideCollectionWithWindowTabs(
+          sess.collectionId,
+          sess.windowId,
+        );
+      } catch (_) {}
+    })();
   }
 });
 
 // Popup commands → message listener
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
       if (message && message.type === 'performSync') {
@@ -1632,6 +1975,44 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message && message.type === 'saveCurrentWindowAsProject') {
         const projectName = (message && message.name) || '';
         await saveCurrentWindowAsProject(projectName);
+        sendResponse({ ok: true });
+        return;
+      }
+      if (message && message.type === 'startSyncCurrentWindowAsProject') {
+        const projectName = (message && message.name) || '';
+        // Resolve the real browser window id reliably (avoid the popup window id)
+        let winId = null;
+        try {
+          const tabs = await new Promise((resolve) =>
+            chrome.tabs.query({ active: true, lastFocusedWindow: true }, (ts) =>
+              resolve(ts || []),
+            ),
+          );
+          const t = Array.isArray(tabs) && tabs.length ? tabs[0] : null;
+          if (t && t.windowId != null) winId = Number(t.windowId);
+        } catch (_) {}
+        if (!Number.isFinite(winId)) {
+          const fromSender = sender && sender.tab && sender.tab.windowId;
+          if (Number.isFinite(Number(fromSender))) winId = Number(fromSender);
+        }
+        if (!Number.isFinite(winId)) {
+          try {
+            const normals = await new Promise((resolve) =>
+              chrome.windows.getAll({ windowTypes: ['normal'] }, (ws) =>
+                resolve(ws || []),
+              ),
+            );
+            if (Array.isArray(normals) && normals.length) {
+              // pick the first normal window; better than none
+              winId = Number(normals[0].id);
+            }
+          } catch (_) {}
+        }
+        if (!Number.isFinite(winId)) {
+          sendResponse({ ok: false, error: 'NO_WINDOW_ID' });
+          return;
+        }
+        await startSyncCurrentWindowAsProject(projectName, Number(winId));
         sendResponse({ ok: true });
         return;
       }
