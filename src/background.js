@@ -32,6 +32,7 @@ const STORAGE_KEYS = {
   groupMap: 'groupMap', // { [groupTitle: string]: chromeFolderId: string }
   itemMap: 'itemMap', // { [raindropItemId: string]: chromeBookmarkId: string }
   rootFolderId: 'rootFolderId', // chrome folder id for the Raindrop root
+  windowProjectMap: 'windowProjectMap', // { [windowId: string]: { collectionId: number, collectionName: string } }
 };
 
 import {
@@ -1790,12 +1791,39 @@ async function saveHighlightedTabsAsProject(projectName) {
 async function saveCurrentWindowAsProject(projectName) {
   const name = String(projectName || '').trim();
   if (!name) return;
+
+  const windowId = chrome.windows.WINDOW_ID_CURRENT;
   const tabsList = await new Promise((resolve) =>
-    chrome.tabs.query({ windowId: chrome.windows.WINDOW_ID_CURRENT }, (ts) =>
-      resolve(ts || []),
-    ),
+    chrome.tabs.query({ windowId }, (ts) => resolve(ts || [])),
   );
-  await saveTabsListAsProject(name, tabsList || []);
+
+  const prefixedName = `⏫ ${name}`;
+  const result = await saveTabsListAsProject(prefixedName, tabsList || []);
+  if (result && result.projectCollectionId) {
+    const { projectCollectionId, name: collectionName } = result;
+    try {
+      const data = await chromeP.storageSessionGet(STORAGE_KEYS.windowProjectMap);
+      const map = (data && data[STORAGE_KEYS.windowProjectMap]) || {};
+      map[windowId] = {
+        collectionId: projectCollectionId,
+        collectionName: collectionName,
+      };
+      await chromeP.storageSessionSet({ [STORAGE_KEYS.windowProjectMap]: map });
+
+      // Set badge and title for all tabs in this window
+      for (const tab of tabsList) {
+        if (tab.id) {
+          chrome.action.setBadgeText({ text: '⏫', tabId: tab.id });
+          chrome.action.setTitle({
+            title: `Tabs in this window will be sync to [${collectionName}]`,
+            tabId: tab.id,
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Failed to save window project map', e);
+    }
+  }
 }
 
 /**
@@ -1803,8 +1831,10 @@ async function saveCurrentWindowAsProject(projectName) {
  * the "Saved Projects" group. Handles grouping, collection creation and bulk save.
  * @param {string} name
  * @param {chrome.tabs.Tab[]} tabsList
+ * @returns {Promise<{projectCollectionId: number, name: string}|null>}
  */
 async function saveTabsListAsProject(name, tabsList) {
+  let projectCollectionId = null;
   setBadge('💾', '#a855f7');
   try {
     // Filter http(s)
@@ -1939,12 +1969,15 @@ async function saveTabsListAsProject(name, tabsList) {
         } to ${savedProjectsTitle}/${name}`,
       );
     } catch (_) {}
+
+    return { projectCollectionId, name };
   } catch (e) {
     setBadge('😵', '#ef4444');
     scheduleClearBadge(3000);
     try {
       notify(`Failed to save project: ${e}`);
     } catch (_) {}
+    return null;
   }
 }
 
@@ -2161,11 +2194,14 @@ async function recoverSavedProject(collectionId) {
  * saves tab items with metadata, and deletes the old collection.
  * @param {number|string} collectionId
  * @param {chrome.tabs.Tab[]} tabsList
- * @returns {Promise<{ title: string, count: number }>}
+ * @param {{isReplacingForWindow?: boolean}} [options]
+ * @returns {Promise<{ title: string, count: number, newCollectionId: number|null }>}
  */
-async function replaceSavedProjectWithTabs(collectionId, tabsList) {
+async function replaceSavedProjectWithTabs(collectionId, tabsList, options) {
+  const isReplacingForWindow = !!(options && options.isReplacingForWindow);
   const oldId = Number(collectionId);
-  if (!Number.isFinite(oldId)) return { title: 'Project', count: 0 };
+  if (!Number.isFinite(oldId))
+    return { title: 'Project', count: 0, newCollectionId: null };
 
   // Filter http(s) and build items with metadata (group title/color, pinned, index)
   const eligibleTabs = (tabsList || []).filter(
@@ -2212,7 +2248,13 @@ async function replaceSavedProjectWithTabs(collectionId, tabsList) {
 
   const roots = Array.isArray(rootsRes?.items) ? rootsRes.items : [];
   const existing = roots.find((c) => Number(c?._id) === oldId);
-  const title = existing?.title || 'Project';
+  let baseTitle = existing?.title || 'Project';
+  const wasWindowProject = baseTitle.startsWith('⏫ ');
+  if (wasWindowProject) {
+    baseTitle = baseTitle.substring(2);
+  }
+  const newTitle =
+    isReplacingForWindow || wasWindowProject ? `⏫ ${baseTitle}` : baseTitle;
   const existingCoverArray = Array.isArray(existing?.cover)
     ? existing.cover.filter(Boolean)
     : existing?.cover
@@ -2220,7 +2262,7 @@ async function replaceSavedProjectWithTabs(collectionId, tabsList) {
     : [];
 
   // Create a new collection with the same title
-  const created = await apiPOST('/collection', { title });
+  const created = await apiPOST('/collection', { title: newTitle });
   const createdItem = created && (created.item || created.data || created);
   const newId = createdItem && (createdItem._id ?? createdItem.id);
   if (newId == null) throw new Error('Failed to create collection');
@@ -2288,7 +2330,7 @@ async function replaceSavedProjectWithTabs(collectionId, tabsList) {
     await apiDELETE(`/collection/${encodeURIComponent(oldId)}`);
   } catch (_) {}
 
-  return { title, count: items.length };
+  return { title: newTitle, count: items.length, newCollectionId: newId };
 }
 
 /**
@@ -2334,25 +2376,49 @@ async function replaceSavedProject(collectionId) {
 async function replaceSavedProjectWithCurrentWindowTabs(collectionId) {
   setBadge('⏫', '#f59e0b');
   try {
+    const windowId = chrome.windows.WINDOW_ID_CURRENT;
     /** @type {chrome.tabs.Tab[]} */
     const windowTabs = await new Promise((resolve) =>
-      chrome.tabs.query({ windowId: chrome.windows.WINDOW_ID_CURRENT }, (ts) =>
-        resolve(ts || []),
-      ),
+      chrome.tabs.query({ windowId }, (ts) => resolve(ts || [])),
     );
-    const { title, count } = await replaceSavedProjectWithTabs(
+    const result = await replaceSavedProjectWithTabs(
       collectionId,
       windowTabs || [],
+      { isReplacingForWindow: true },
     );
-    setBadge('✔️', '#22c55e');
-    scheduleClearBadge(3000);
-    try {
+
+    if (result && result.newCollectionId) {
+      const { title, count, newCollectionId } = result;
+
+      // Update storage with the new collection ID for this window
+      const data = await chromeP.storageSessionGet(STORAGE_KEYS.windowProjectMap);
+      const map = (data && data[STORAGE_KEYS.windowProjectMap]) || {};
+      map[windowId] = {
+        collectionId: newCollectionId,
+        collectionName: title,
+      };
+      await chromeP.storageSessionSet({ [STORAGE_KEYS.windowProjectMap]: map });
+
+      // Set badge and title for all tabs in this window
+      for (const tab of windowTabs) {
+        if (tab.id) {
+          chrome.action.setBadgeText({ text: '⏫', tabId: tab.id });
+          chrome.action.setTitle({
+            title: `Tabs in this window will be sync to [${title}]`,
+            tabId: tab.id,
+          });
+        }
+      }
+
       notify(
         `Replaced project "${title}" with ${count} tab${
           count > 1 ? 's' : ''
         } from current window`,
       );
-    } catch (_) {}
+    }
+
+    setBadge('✔️', '#22c55e');
+    scheduleClearBadge(3000);
   } catch (e) {
     setBadge('😵', '#ef4444');
     scheduleClearBadge(3000);
@@ -2436,6 +2502,19 @@ chrome.storage?.onChanged.addListener((changes, area) => {
 });
 
 // Open Options when user clicks token notification
+chrome.windows?.onRemoved.addListener(async (windowId) => {
+  try {
+    const data = await chromeP.storageSessionGet(STORAGE_KEYS.windowProjectMap);
+    const map = (data && data[STORAGE_KEYS.windowProjectMap]) || {};
+    if (map[windowId]) {
+      delete map[windowId];
+      await chromeP.storageSessionSet({ [STORAGE_KEYS.windowProjectMap]: map });
+    }
+  } catch (e) {
+    console.error('Failed to remove window project map entry', e);
+  }
+});
+
 chrome.notifications?.onClicked.addListener((notificationId) => {
   if (notificationId === TOKEN_NOTIFICATION_ID) {
     try {
