@@ -1600,6 +1600,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse({ ok: true });
         return;
       }
+      if (
+        message &&
+        message.type === 'replaceSavedProjectWithCurrentWindowTabs'
+      ) {
+        const id = message && message.id;
+        await replaceSavedProjectWithCurrentWindowTabs(id);
+        sendResponse({ ok: true });
+        return;
+      }
       if (message && message.type === 'deleteSavedProject') {
         const id = message && message.id;
         await deleteSavedProject(id);
@@ -2147,17 +2156,149 @@ async function recoverSavedProject(collectionId) {
 }
 
 /**
+ * Core logic to replace a Saved Project collection with a provided list of tabs.
+ * Creates a new collection preserving title and cover, reorders Saved Projects,
+ * saves tab items with metadata, and deletes the old collection.
+ * @param {number|string} collectionId
+ * @param {chrome.tabs.Tab[]} tabsList
+ * @returns {Promise<{ title: string, count: number }>}
+ */
+async function replaceSavedProjectWithTabs(collectionId, tabsList) {
+  const oldId = Number(collectionId);
+  if (!Number.isFinite(oldId)) return { title: 'Project', count: 0 };
+
+  // Filter http(s) and build items with metadata (group title/color, pinned, index)
+  const eligibleTabs = (tabsList || []).filter(
+    (t) =>
+      t.url && (t.url.startsWith('https://') || t.url.startsWith('http://')),
+  );
+  if (eligibleTabs.length === 0) throw new Error('No eligible http(s) tabs');
+
+  /** @type {chrome.tabGroups.TabGroup[]} */
+  const groupsInWindow = await new Promise((resolve) =>
+    chrome.tabGroups?.query(
+      { windowId: chrome.windows.WINDOW_ID_CURRENT },
+      (gs) => resolve(gs || []),
+    ),
+  );
+  const groupIdToMeta = new Map();
+  (groupsInWindow || []).forEach((g) => groupIdToMeta.set(g.id, g));
+  const items = eligibleTabs.map((t, i) => {
+    const baseTitle = t.title || t.url || '';
+    const group = groupIdToMeta.get(t.groupId) || null;
+    const meta = {
+      index: i,
+      pinned: t.pinned,
+      tabGroup: group && group.title,
+      tabGroupColor: group && group.color,
+    };
+    return { link: t.url, title: baseTitle, note: JSON.stringify(meta) };
+  });
+
+  // Look up the existing collection title/cover and Saved Projects group ordering
+  const [userRes, rootsRes] = await Promise.all([
+    apiGET('/user'),
+    apiGET('/collections'),
+  ]);
+  const groups = Array.isArray(userRes?.user?.groups)
+    ? userRes.user.groups
+    : [];
+  const savedIdx = groups.findIndex((g) => (g && g.title) === 'Saved Projects');
+  const savedGroup = savedIdx >= 0 ? groups[savedIdx] : null;
+  const order = Array.isArray(savedGroup?.collections)
+    ? savedGroup.collections.slice()
+    : [];
+  const pos = order.findIndex((cid) => Number(cid) === oldId);
+
+  const roots = Array.isArray(rootsRes?.items) ? rootsRes.items : [];
+  const existing = roots.find((c) => Number(c?._id) === oldId);
+  const title = existing?.title || 'Project';
+  const existingCoverArray = Array.isArray(existing?.cover)
+    ? existing.cover.filter(Boolean)
+    : existing?.cover
+    ? [existing.cover]
+    : [];
+
+  // Create a new collection with the same title
+  const created = await apiPOST('/collection', { title });
+  const createdItem = created && (created.item || created.data || created);
+  const newId = createdItem && (createdItem._id ?? createdItem.id);
+  if (newId == null) throw new Error('Failed to create collection');
+
+  // Preserve existing cover if there was one
+  if (existingCoverArray.length > 0) {
+    try {
+      await apiPUT(`/collection/${encodeURIComponent(newId)}`, {
+        cover: existingCoverArray,
+      });
+    } catch (_) {}
+  }
+
+  // Update Saved Projects group ordering: replace oldId with newId at the same index
+  try {
+    if (savedIdx >= 0) {
+      const newGroups = groups.slice();
+      const entry = {
+        ...(newGroups[savedIdx] || {
+          title: 'Saved Projects',
+          collections: [],
+        }),
+      };
+      const cols = Array.isArray(entry.collections)
+        ? entry.collections.slice()
+        : [];
+      if (pos >= 0) {
+        cols.splice(pos, 1, Number(newId));
+      } else {
+        const filtered = cols.filter((cid) => Number(cid) !== Number(newId));
+        filtered.unshift(Number(newId));
+        entry.collections = filtered;
+      }
+      if (pos >= 0) entry.collections = cols;
+      newGroups[savedIdx] = entry;
+      await apiPUT('/user', { groups: newGroups });
+    }
+  } catch (_) {}
+
+  // Bulk save items into new collection
+  try {
+    await apiPOST('/raindrops', {
+      items: items.map((it) => ({
+        link: it.link,
+        title: it.title,
+        note: it.note,
+        collection: { $id: Number(newId) },
+      })),
+    });
+  } catch (_) {
+    for (const it of items) {
+      try {
+        await apiPOST('/raindrop', {
+          link: it.link,
+          title: it.title,
+          note: it.note,
+          collection: { $id: Number(newId) },
+        });
+      } catch (_) {}
+    }
+  }
+
+  // Remove old collection
+  try {
+    await apiDELETE(`/collection/${encodeURIComponent(oldId)}`);
+  } catch (_) {}
+
+  return { title, count: items.length };
+}
+
+/**
  * Replace an existing Saved Project collection with the currently highlighted tabs.
  * Keeps the same title and position in the Saved Projects group ordering.
  * @param {number|string} collectionId
  */
 async function replaceSavedProject(collectionId) {
-  const oldId = Number(collectionId);
-  if (!Number.isFinite(oldId)) return;
-
   setBadge('🔼', '#f59e0b');
   try {
-    // Gather highlighted tabs (http/https only)
     /** @type {chrome.tabs.Tab[]} */
     const highlightedTabs = await new Promise((resolve) =>
       chrome.tabs.query(
@@ -2165,138 +2306,51 @@ async function replaceSavedProject(collectionId) {
         (ts) => resolve(ts || []),
       ),
     );
-    const eligibleTabs = (highlightedTabs || []).filter(
-      (t) =>
-        t.url && (t.url.startsWith('https://') || t.url.startsWith('http://')),
+    const { title, count } = await replaceSavedProjectWithTabs(
+      collectionId,
+      highlightedTabs || [],
     );
-    if (eligibleTabs.length === 0)
-      throw new Error('No highlighted http(s) tabs');
-
-    // Build items with metadata (preserve tab group title/color and order index)
-    /** @type {chrome.tabGroups.TabGroup[]} */
-    const groupsInWindow = await new Promise((resolve) =>
-      chrome.tabGroups?.query(
-        { windowId: chrome.windows.WINDOW_ID_CURRENT },
-        (gs) => resolve(gs || []),
-      ),
-    );
-    const groupIdToMeta = new Map();
-    (groupsInWindow || []).forEach((g) => groupIdToMeta.set(g.id, g));
-    const items = eligibleTabs.map((t, i) => {
-      const baseTitle = t.title || t.url || '';
-      const group = groupIdToMeta.get(t.groupId) || null;
-      const meta = {
-        index: i,
-        pinned: t.pinned,
-        tabGroup: group && group.title,
-        tabGroupColor: group && group.color,
-      };
-      return { link: t.url, title: baseTitle, note: JSON.stringify(meta) };
-    });
-
-    // Look up the existing collection title and Saved Projects group ordering
-    const [userRes, rootsRes] = await Promise.all([
-      apiGET('/user'),
-      apiGET('/collections'),
-    ]);
-    const groups = Array.isArray(userRes?.user?.groups)
-      ? userRes.user.groups
-      : [];
-    const savedIdx = groups.findIndex(
-      (g) => (g && g.title) === 'Saved Projects',
-    );
-    const savedGroup = savedIdx >= 0 ? groups[savedIdx] : null;
-    const order = Array.isArray(savedGroup?.collections)
-      ? savedGroup.collections.slice()
-      : [];
-    const pos = order.findIndex((cid) => Number(cid) === oldId);
-
-    const roots = Array.isArray(rootsRes?.items) ? rootsRes.items : [];
-    const existing = roots.find((c) => Number(c?._id) === oldId);
-    const title = existing?.title || 'Project';
-    const existingCoverArray = Array.isArray(existing?.cover)
-      ? existing.cover.filter(Boolean)
-      : existing?.cover
-      ? [existing.cover]
-      : [];
-
-    // Create a new collection with the same title
-    const created = await apiPOST('/collection', { title });
-    const createdItem = created && (created.item || created.data || created);
-    const newId = createdItem && (createdItem._id ?? createdItem.id);
-    if (newId == null) throw new Error('Failed to create collection');
-
-    // Preserve existing cover if there was one
-    if (existingCoverArray.length > 0) {
-      try {
-        await apiPUT(`/collection/${encodeURIComponent(newId)}`, {
-          cover: existingCoverArray,
-        });
-      } catch (_) {}
-    }
-
-    // Update Saved Projects group ordering: replace oldId with newId at the same index
-    try {
-      if (savedIdx >= 0) {
-        const newGroups = groups.slice();
-        const entry = {
-          ...(newGroups[savedIdx] || {
-            title: 'Saved Projects',
-            collections: [],
-          }),
-        };
-        const cols = Array.isArray(entry.collections)
-          ? entry.collections.slice()
-          : [];
-        if (pos >= 0) {
-          cols.splice(pos, 1, Number(newId));
-        } else {
-          // if not found, prepend
-          const filtered = cols.filter((cid) => Number(cid) !== Number(newId));
-          filtered.unshift(Number(newId));
-          entry.collections = filtered;
-        }
-        if (pos >= 0) entry.collections = cols;
-        newGroups[savedIdx] = entry;
-        await apiPUT('/user', { groups: newGroups });
-      }
-    } catch (_) {}
-
-    // Bulk save items into new collection
-    try {
-      await apiPOST('/raindrops', {
-        items: items.map((it) => ({
-          link: it.link,
-          title: it.title,
-          note: it.note,
-          collection: { $id: Number(newId) },
-        })),
-      });
-    } catch (_) {
-      for (const it of items) {
-        try {
-          await apiPOST('/raindrop', {
-            link: it.link,
-            title: it.title,
-            note: it.note,
-            collection: { $id: Number(newId) },
-          });
-        } catch (_) {}
-      }
-    }
-
-    // Remove old collection
-    try {
-      await apiDELETE(`/collection/${encodeURIComponent(oldId)}`);
-    } catch (_) {}
-
     setBadge('✔️', '#22c55e');
     scheduleClearBadge(3000);
     try {
       notify(
-        `Replaced project "${title}" with ${items.length} tab${
-          items.length > 1 ? 's' : ''
-        }`,
+        `Replaced project "${title}" with ${count} tab${count > 1 ? 's' : ''}`,
+      );
+    } catch (_) {}
+  } catch (e) {
+    setBadge('😵', '#ef4444');
+    scheduleClearBadge(3000);
+    try {
+      notify(`Failed to replace project: ${e}`);
+    } catch (_) {}
+  }
+}
+
+/**
+ * Replace an existing Saved Project collection with all tabs from the current window.
+ * Keeps the same title and position in the Saved Projects group ordering.
+ * @param {number|string} collectionId
+ */
+async function replaceSavedProjectWithCurrentWindowTabs(collectionId) {
+  setBadge('⏫', '#f59e0b');
+  try {
+    /** @type {chrome.tabs.Tab[]} */
+    const windowTabs = await new Promise((resolve) =>
+      chrome.tabs.query({ windowId: chrome.windows.WINDOW_ID_CURRENT }, (ts) =>
+        resolve(ts || []),
+      ),
+    );
+    const { title, count } = await replaceSavedProjectWithTabs(
+      collectionId,
+      windowTabs || [],
+    );
+    setBadge('✔️', '#22c55e');
+    scheduleClearBadge(3000);
+    try {
+      notify(
+        `Replaced project "${title}" with ${count} tab${
+          count > 1 ? 's' : ''
+        } from current window`,
       );
     } catch (_) {}
   } catch (e) {

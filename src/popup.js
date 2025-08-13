@@ -193,17 +193,47 @@
             const right = document.createElement('div');
             right.className = 'flex items-center gap-1';
 
-            const replaceBtn = document.createElement('button');
-            replaceBtn.type = 'button';
-            replaceBtn.title = 'Replace';
-            replaceBtn.textContent = '🔼';
-            replaceBtn.className =
-              'px-2 py-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
-            replaceBtn.addEventListener('click', async (e) => {
+            const replaceWithCurrentWindowBtn =
+              document.createElement('button');
+            replaceWithCurrentWindowBtn.type = 'button';
+            replaceWithCurrentWindowBtn.title =
+              'Replace with current window tabs';
+            replaceWithCurrentWindowBtn.textContent = '⏫';
+            replaceWithCurrentWindowBtn.className =
+              'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+            replaceWithCurrentWindowBtn.addEventListener('click', async (e) => {
               e.preventDefault();
               e.stopPropagation();
-              replaceBtn.disabled = true;
-              li.classList.add('opacity-60');
+              const ok = confirm(
+                `Replace saved project "${String(
+                  it.title || 'Untitled',
+                )}" with current window tabs?`,
+              );
+              if (!ok) return;
+              disableAllButtons();
+              setStatus('Replacing…');
+              await sendCommand('replaceSavedProjectWithCurrentWindowTabs', {
+                id: it.id,
+              });
+              window.close();
+            });
+
+            const replaceWithSelectedTabsBtn = document.createElement('button');
+            replaceWithSelectedTabsBtn.type = 'button';
+            replaceWithSelectedTabsBtn.title = 'Replace with selected tabs';
+            replaceWithSelectedTabsBtn.textContent = '🔼';
+            replaceWithSelectedTabsBtn.className =
+              'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+            replaceWithSelectedTabsBtn.addEventListener('click', async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const ok = confirm(
+                `Replace saved project "${String(
+                  it.title || 'Untitled',
+                )}" with selected tabs?`,
+              );
+              if (!ok) return;
+              disableAllButtons();
               setStatus('Replacing…');
               await sendCommand('replaceSavedProject', { id: it.id });
               window.close();
@@ -214,18 +244,29 @@
             deleteBtn.title = 'Delete';
             deleteBtn.textContent = '❌';
             deleteBtn.className =
-              'px-2 py-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+              'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
             deleteBtn.addEventListener('click', async (e) => {
               e.preventDefault();
               e.stopPropagation();
-              deleteBtn.disabled = true;
-              li.classList.add('opacity-60');
+              const ok = confirm(
+                `Delete saved project "${String(it.title || 'Untitled')}"?`,
+              );
+              if (!ok) return;
+              disableAllButtons();
               setStatus('Deleting…');
               await sendCommand('deleteSavedProject', { id: it.id });
               window.close();
             });
 
-            right.appendChild(replaceBtn);
+            function disableAllButtons() {
+              replaceWithCurrentWindowBtn.disabled = true;
+              replaceWithSelectedTabsBtn.disabled = true;
+              deleteBtn.disabled = true;
+              li.classList.add('opacity-60');
+            }
+
+            right.appendChild(replaceWithCurrentWindowBtn);
+            right.appendChild(replaceWithSelectedTabsBtn);
             right.appendChild(deleteBtn);
 
             li.appendChild(left);
