@@ -357,7 +357,7 @@ async function restoreActionUiForActiveWindow() {
       const pn = projectNameWithoutPrefix(sess.name || '');
       setActionTitle(
         pn
-          ? `Tabs in this window are syncing to ${pn}`
+          ? `Tabs in this window is syncing to ${pn}`
           : 'This window is syncing to a Saved Project',
       );
     } else {
@@ -1696,7 +1696,7 @@ async function startSyncCurrentWindowAsProject(projectName, windowId) {
     const pn = projectNameWithoutPrefix(syncTitle);
     setActionTitle(
       pn
-        ? `Tabs in this window are syncing to ${pn}`
+        ? `Tabs in this window is syncing to ${pn}`
         : 'This window is syncing to a Saved Project',
     );
   } catch (_) {}
@@ -1865,12 +1865,8 @@ async function buildItemsFromWindowTabs(windowId) {
 }
 
 /**
- * Upsert items in a Saved Project collection from a window's tabs.
- *
- * Never removes existing items from the collection. This prevents accidental
- * loss when a tab failed to load or is temporarily ineligible. Verifies the
- * collection exists, then updates existing items (matched by URL) and creates
- * missing ones. Stops the session if the collection is missing.
+ * Override all items in a collection with tabs from a window. Deletes existing items
+ * and then bulk creates current items. Stops the session if collection is missing.
  * @param {number} collectionId
  * @param {number} windowId
  */
@@ -1884,89 +1880,34 @@ async function overrideCollectionWithWindowTabs(collectionId, windowId) {
     throw e;
   }
 
-  // Build next state from window tabs. If nothing to save, skip.
+  // Build next state from window tabs first. If nothing to save, do not clear
+  // the existing collection so we don't wipe items when the window closes.
   const itemsToSave = await buildItemsFromWindowTabs(windowId);
   if (itemsToSave.length === 0) return;
 
-  // Read existing items in the collection to perform an upsert by URL
-  const existingByLink = new Map(); // link -> { _id, title, note }
+  // Fast clear: move all items in the collection to Trash in one call
   try {
-    let page = 0;
-    while (true) {
-      const res = await apiGET(
-        `/raindrops/${encodeURIComponent(
-          Number(collectionId),
-        )}?perpage=50&page=${page}`,
-      );
-      const existing = Array.isArray(res.items) ? res.items : [];
-      for (const it of existing) {
-        const link = it && (it.link || it.url);
-        if (!link) continue;
-        const id = it && (it._id ?? it.id);
-        existingByLink.set(String(link), {
-          _id: id,
-          title: it && (it.title || ''),
-          note: it && (it.note || ''),
-        });
-      }
-      if (existing.length < 50) break;
-      page += 1;
-    }
+    await apiDELETE(`/raindrops/${encodeURIComponent(Number(collectionId))}`);
   } catch (_) {}
-
-  const toCreate = [];
-  const toUpdate = [];
-  for (const it of itemsToSave) {
-    const key = String(it.link || '');
-    if (!key) continue;
-    const ex = existingByLink.get(key);
-    if (ex && ex._id != null) {
-      const desiredTitle = it.title || '';
-      const desiredNote = it.note || '';
-      if (
-        (ex.title || '') !== desiredTitle ||
-        (ex.note || '') !== desiredNote
-      ) {
-        toUpdate.push({ id: ex._id, title: desiredTitle, note: desiredNote });
-      }
-    } else {
-      toCreate.push(it);
-    }
-  }
-
-  // Apply updates
-  for (const u of toUpdate) {
-    try {
-      await apiPUT(`/raindrop/${encodeURIComponent(u.id)}`, {
-        title: u.title,
-        note: u.note,
+  try {
+    await apiPOST('/raindrops', {
+      items: itemsToSave.map((it) => ({
+        link: it.link,
+        title: it.title,
+        note: it.note,
         collection: { $id: Number(collectionId) },
-      });
-    } catch (_) {}
-  }
-
-  // Create missing items (bulk, then fallback)
-  if (toCreate.length > 0) {
-    try {
-      await apiPOST('/raindrops', {
-        items: toCreate.map((it) => ({
+      })),
+    });
+  } catch (_) {
+    for (const it of itemsToSave) {
+      try {
+        await apiPOST('/raindrop', {
           link: it.link,
           title: it.title,
           note: it.note,
           collection: { $id: Number(collectionId) },
-        })),
-      });
-    } catch (_) {
-      for (const it of toCreate) {
-        try {
-          await apiPOST('/raindrop', {
-            link: it.link,
-            title: it.title,
-            note: it.note,
-            collection: { $id: Number(collectionId) },
-          });
-        } catch (_) {}
-      }
+        });
+      } catch (_) {}
     }
   }
 }
