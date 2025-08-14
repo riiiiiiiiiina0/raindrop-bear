@@ -4,11 +4,12 @@ One tiny purpose: sync your Raindrop.io collections and bookmarks into your brow
 
 ### Why you’ll love it
 
-- **Two‑way sync**: cloud ↔ local under a managed `Raindrop` folder
+- **One‑way sync**: mirrors cloud → local under a managed `Raindrop` folder
 - **Mirrors your structure**: groups become folders, collections become subfolders
 - **Auto‑sync every ~10 minutes**: or run a manual sync from the popup
 - **Unsorted handled**: items in Raindrop “Unsorted” go to a matching `Unsorted` folder
-- **Saved Projects**: save highlighted tabs or your whole window as a named project in Raindrop, then recover it later from the popup
+- **Saved Projects**: save highlighted tabs as a named project in Raindrop, then recover it later from the popup
+- **⏫ Live window sync**: keep a Raindrop project in sync with your current window’s tabs until you stop it
 - **Quiet by default**: optional notifications after each sync
 
 ### Simple setup
@@ -21,8 +22,9 @@ One tiny purpose: sync your Raindrop.io collections and bookmarks into your brow
 
 - **Sync now**
 - **Save to Unsorted**: send current/highlighted tabs to Raindrop Unsorted
-- **Save as Project**: save highlighted tabs or the entire current window under Raindrop → `Saved Projects`
-- **Recover a project**: reopen a saved project (restores order and tab groups when available)
+- **Save as Project**: save highlighted tabs under Raindrop → `Saved Projects`
+- **⏫ Sync current window as project**: start live syncing the current window to a project (stop by closing the window)
+- **Recover/Delete a project**: reopen a saved project (restores order and tab groups when available) or delete it from the popup
 
 ### Permissions (what and why)
 
@@ -40,7 +42,7 @@ One tiny purpose: sync your Raindrop.io collections and bookmarks into your brow
 
 ### Notes
 
-- Sync is **two‑way** within the managed `Raindrop` folder
+- Sync is **one‑way** (Raindrop → local) within the managed `Raindrop` folder
 - The Raindrop group `Saved Projects` is kept cloud‑only and is not mirrored into local bookmarks
 - If you delete the `Raindrop` folder, the next sync will recreate it safely
 
