@@ -205,9 +205,13 @@ async function saveUrlToUnsorted(url, title) {
     };
     await apiPOST('/raindrop', body);
     notify('Link saved to Unsorted!');
+    setBadge('✔️', '#22c55e');
+    scheduleClearBadge(3000);
   } catch (err) {
     console.error('Failed to save link to Unsorted:', err);
     notify('Error saving link to Unsorted.');
+    setBadge('😵', '#ef4444');
+    scheduleClearBadge(3000);
   }
 }
 
