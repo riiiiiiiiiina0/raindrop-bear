@@ -2121,7 +2121,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       if (message && message.type === 'recoverSavedProject') {
         const id = message && message.id;
-        await recoverSavedProject(id);
+        const restoreResult = await recoverSavedProject(id);
+        // If we just focused an existing synced window, stop here and do not notify
+        if (restoreResult && restoreResult.focusedExisting) {
+          sendResponse({ ok: true });
+          return;
+        }
         // If the recovered project's title starts with the sync emoji, begin a live sync
         try {
           const colId = Number(id);
@@ -2573,6 +2578,39 @@ async function listSavedProjects() {
 async function recoverSavedProject(collectionId) {
   const colId = Number(collectionId);
   if (!Number.isFinite(colId)) return;
+
+  // If this project is already syncing with an existing window, focus that window
+  // instead of creating a new one.
+  try {
+    let existingWinId = null;
+    for (const sess of windowSyncSessions.values()) {
+      if (sess && !sess.stopped && Number(sess.collectionId) === colId) {
+        existingWinId = sess.windowId;
+        break;
+      }
+    }
+    if (Number.isFinite(Number(existingWinId))) {
+      // Verify the window still exists
+      let existingWindow = null;
+      try {
+        existingWindow = await new Promise((resolve) =>
+          chrome.windows.get(Number(existingWinId), (w) => resolve(w)),
+        );
+      } catch (_) {}
+      if (existingWindow) {
+        try {
+          await chrome.windows.update(Number(existingWinId), { focused: true });
+        } catch (_) {}
+        return { focusedExisting: true, windowId: Number(existingWinId) };
+      } else {
+        // Clean up stale session mapping and proceed to restore
+        try {
+          windowSyncSessions.delete(Number(existingWinId));
+          await persistActiveSyncSessions();
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
 
   // Export all items on that collection
   const html = await apiGETText(`/raindrops/${colId}/export.html`);
