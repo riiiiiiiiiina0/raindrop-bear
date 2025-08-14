@@ -142,7 +142,9 @@ async function performSync() {
       getOrCreateChildFolderLocal,
     );
     const { itemMap: prunedItemMap, didChange: deletionsChanged } =
-      await syncDeletedItems(state.lastSync, updatedItemMap, collectionMap);
+      state.lastSync
+        ? await syncDeletedItems(state.lastSync, updatedItemMap, collectionMap)
+        : { itemMap: updatedItemMap, didChange: false };
     hasAnyChanges = Boolean(foldersChanged || itemsChanged || deletionsChanged);
     await saveState({
       lastSync: newLastSyncISO,

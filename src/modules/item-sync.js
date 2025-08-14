@@ -210,6 +210,10 @@ export async function syncNewAndUpdatedItems(
 }
 
 export async function syncDeletedItems(lastSyncISO, itemMap, collectionMap) {
+  // Skip fetching trashed items on the initial sync
+  if (!lastSyncISO) {
+    return { itemMap, didChange: false };
+  }
   let page = 0;
   let stop = false;
   let didChange = false;
