@@ -195,6 +195,22 @@ async function performSync() {
   }
 }
 
+async function saveUrlToUnsorted(url, title) {
+  try {
+    const body = {
+      link: url,
+      title: title || url,
+      collection: { $id: UNSORTED_COLLECTION_ID },
+      pleaseParse: {},
+    };
+    await apiPOST('/raindrop', body);
+    notify('Link saved to Unsorted!');
+  } catch (err) {
+    console.error('Failed to save link to Unsorted:', err);
+    notify('Error saving link to Unsorted.');
+  }
+}
+
 chrome.runtime.onInstalled.addListener(async (details) => {
   try {
     chrome.alarms.create(ALARM_NAME, { periodInMinutes: SYNC_PERIOD_MINUTES });
@@ -202,6 +218,23 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   try {
     await removeLegacyTopFolders();
   } catch (_) {}
+
+  // Create context menus
+  try {
+    chrome.contextMenus.create({
+      id: 'save-link',
+      title: 'Save link to Unsorted',
+      contexts: ['link'],
+    });
+    chrome.contextMenus.create({
+      id: 'save-page',
+      title: 'Save page to Unsorted',
+      contexts: ['page'],
+    });
+  } catch (err) {
+    console.error('Failed to create context menus:', err);
+  }
+
   if (details && details.reason === 'install') {
     try {
       const data = await chromeP.storageGet('raindropApiToken');
@@ -809,5 +842,22 @@ chrome.notifications?.onClicked.addListener((notificationId) => {
         chrome.notifications.clear(notificationId);
       } catch (_) {}
     })();
+  }
+});
+
+chrome.contextMenus?.onClicked.addListener(async (info, tab) => {
+  const { menuItemId } = info;
+  if (menuItemId === 'save-link') {
+    const url = info.linkUrl;
+    if (url) {
+      // For links, the title is the link's text content, or the URL itself if no text is selected.
+      const title = info.selectionText || info.linkUrl;
+      await saveUrlToUnsorted(url, title);
+    }
+  } else if (menuItemId === 'save-page') {
+    const url = info.pageUrl;
+    if (url) {
+      await saveUrlToUnsorted(url, tab?.title || info.pageUrl);
+    }
   }
 });
