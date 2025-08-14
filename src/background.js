@@ -83,6 +83,8 @@ import {
 
 const ALARM_NAME = 'raindrop-sync';
 const SYNC_PERIOD_MINUTES = 10;
+const TRASH_CLEAN_ALARM_NAME = 'raindrop-trash-clean';
+const TRASH_CLEAN_PERIOD_MINUTES = 60;
 
 async function performSync() {
   if (isSyncing) return;
@@ -195,6 +197,16 @@ async function performSync() {
   }
 }
 
+async function cleanRaindropTrash() {
+  try {
+    console.log('Cleaning Raindrop trash...');
+    await apiDELETE('/raindrops/-99');
+    console.log('Raindrop trash cleaned successfully.');
+  } catch (err) {
+    console.error('Failed to clean Raindrop trash:', err);
+  }
+}
+
 async function saveUrlToUnsorted(url, title) {
   try {
     const body = {
@@ -214,6 +226,9 @@ async function saveUrlToUnsorted(url, title) {
 chrome.runtime.onInstalled.addListener(async (details) => {
   try {
     chrome.alarms.create(ALARM_NAME, { periodInMinutes: SYNC_PERIOD_MINUTES });
+    chrome.alarms.create(TRASH_CLEAN_ALARM_NAME, {
+      periodInMinutes: TRASH_CLEAN_PERIOD_MINUTES,
+    });
   } catch (_) {}
   try {
     await removeLegacyTopFolders();
@@ -530,6 +545,7 @@ chrome.runtime.onStartup?.addListener(() => {
 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm && alarm.name === ALARM_NAME) performSync();
+  else if (alarm && alarm.name === TRASH_CLEAN_ALARM_NAME) cleanRaindropTrash();
   else if (alarm && alarm.name === 'raindrop-clear-badge') clearBadge();
   else if (
     alarm &&
