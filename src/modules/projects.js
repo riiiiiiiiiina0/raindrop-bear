@@ -120,19 +120,69 @@ export async function recoverSavedProject(chrome, collectionId) {
       (a, b) => (a.meta?.index ?? 0) - (b.meta?.index ?? 0),
     );
     const first = sorted[0];
-    const newWindow = await chrome.windows.create({
-      focused: true,
-      url: first.url,
-    });
-    if (!newWindow) throw new Error('Failed to create new window');
-    const [activeTab] = await chrome.tabs.query({
-      windowId: newWindow.id,
-      active: true,
-    });
-    if (activeTab && activeTab.id && (first.meta?.pinned ?? false)) {
-      try {
-        await chrome.tabs.update(activeTab.id, { pinned: true });
-      } catch (_) {}
+    // Determine whether to reuse current window (if it has one empty non-pinned tab)
+    const isEmptyNewTabUrl = (u) => {
+      const url = String(u || '').toLowerCase();
+      if (!url) return true;
+      return (
+        url === 'about:blank' ||
+        url.startsWith('chrome://newtab') ||
+        url.startsWith('chrome://new-tab-page')
+      );
+    };
+    let targetWindowId = null;
+    let activeTab = null;
+    try {
+      const currentWindow = await new Promise((resolve) =>
+        chrome.windows.get(chrome.windows.WINDOW_ID_CURRENT, (w) => resolve(w)),
+      );
+      const tabsInCurrent = await new Promise((resolve) =>
+        chrome.tabs.query(
+          { windowId: chrome.windows.WINDOW_ID_CURRENT },
+          (ts) => resolve(ts || []),
+        ),
+      );
+      const soleTab =
+        Array.isArray(tabsInCurrent) && tabsInCurrent.length === 1
+          ? tabsInCurrent[0]
+          : null;
+      const canReuseCurrentWindow =
+        !!currentWindow &&
+        !!soleTab &&
+        !soleTab.pinned &&
+        isEmptyNewTabUrl(soleTab.url);
+      if (canReuseCurrentWindow) {
+        targetWindowId = currentWindow.id;
+        try {
+          await chrome.windows.update(targetWindowId, { focused: true });
+        } catch (_) {}
+        try {
+          await chrome.tabs.update(soleTab.id, {
+            url: first.url,
+            pinned: first.meta?.pinned ?? false,
+            active: true,
+          });
+        } catch (_) {}
+        activeTab = soleTab;
+      }
+    } catch (_) {}
+    if (!targetWindowId) {
+      const newWindow = await chrome.windows.create({
+        focused: true,
+        url: first.url,
+      });
+      if (!newWindow) throw new Error('Failed to create new window');
+      const [active] = await chrome.tabs.query({
+        windowId: newWindow.id,
+        active: true,
+      });
+      activeTab = active || null;
+      if (activeTab && activeTab.id && (first.meta?.pinned ?? false)) {
+        try {
+          await chrome.tabs.update(activeTab.id, { pinned: true });
+        } catch (_) {}
+      }
+      targetWindowId = newWindow.id;
     }
     const tabGroups = [];
     if (activeTab && activeTab.id && first.meta?.tabGroup) {
@@ -147,7 +197,7 @@ export async function recoverSavedProject(chrome, collectionId) {
     for (const it of sorted.slice(1)) {
       const newTab = await chrome.tabs.create({
         url: it.url,
-        windowId: newWindow.id,
+        windowId: targetWindowId,
         pinned: it.meta?.pinned ?? false,
       });
       if (newTab && newTab.id && it.meta?.tabGroup !== null) {
