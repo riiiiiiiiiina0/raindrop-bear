@@ -40,6 +40,15 @@ export function setActionTitle(title) {
   } catch (_) {}
 }
 
+export function flashBadge(success) {
+  if (success) {
+    setBadge('✔️', '#22c55e');
+  } else {
+    setBadge('😵', '#ef4444');
+  }
+  scheduleClearBadge(3000);
+}
+
 export {
   notify,
   notifySyncFailure,
