@@ -10,9 +10,9 @@ A tiny helper with one cuddly purpose: **sync your Raindrop.io collections and b
 
 ## 🚀 What’s New
 
-- 🪟 **New toolbar popup:** One-click actions for Sync, Save to Unsorted, Save as Project (highlighted tabs or entire window), and Recover projects
+- 🪟 **New toolbar popup:** One-click actions for Sync, Save to Unsorted, Save as Project (highlighted tabs), ⏫ Sync current window as project (live), and Recover/Delete projects
 - 💾 **Saved Projects:** Capture a set of tabs as a named project under a special Raindrop group "Saved Projects" and reopen later from the popup
-- 🛡️ **Smarter sync:** The "Saved Projects" group is excluded from local bookmarks mirroring (kept cloud‑only), reducing clutter
+- 🛡️ **Smarter sync:** Now one‑way mirroring (Raindrop → local). The "Saved Projects" group is excluded from local bookmarks mirroring (kept cloud‑only), reducing clutter
 - ✨ **Options UI & notifications:** Clean setup flow and optional success/failure toast after sync
 
 ---
@@ -25,11 +25,12 @@ A tiny helper with one cuddly purpose: **sync your Raindrop.io collections and b
 
 ## What it does
 
-- **Two-way sync:** Raindrop ↔ your local browser bookmarks (bi‑directional updates under the managed `Raindrop` folder)
+- **One‑way sync:** Mirrors Raindrop → your local browser bookmarks under the managed `Raindrop` folder (local edits aren’t mirrored back)
 - Creates a `Raindrop` folder in your Bookmarks Bar, mirroring your groups and collections
 - Keeps things fresh automatically every \~10 minutes, or run a manual sync from the popup
 - **Save to Unsorted:** From the popup, send the current/highlighted tabs to Raindrop’s Unsorted
-- **Saved Projects:** Save highlighted tabs or the entire current window as a project in Raindrop → later, recover it from the popup (restores grouping/order)
+- **Saved Projects:** Save highlighted tabs as a project in Raindrop → later, recover it from the popup (restores grouping/order)
+- **⏫ Sync current window as project (live):** Keep a Raindrop project synced with your current window’s tabs until you stop it
 - **Optional notifications:** Cute toast after every sync
 - **Modern Options UI:** Simple, clean setup
 
@@ -61,7 +62,7 @@ A tiny helper with one cuddly purpose: **sync your Raindrop.io collections and b
 - Mirrors Raindrop groups → top-level folders; collections → subfolders
 - Adds/updates bookmarks; removes ones you’ve trashed in Raindrop
 - “Unsorted” items go into an `Unsorted` folder under `Raindrop`
-- **Two-way:** Changes sync both ways for reliability (under the managed `Raindrop` folder)
+- **One‑way:** Changes flow Raindrop → local only within the managed `Raindrop` folder
 - **Excludes Saved Projects:** Items under the Raindrop group `Saved Projects` stay in the cloud and are not mirrored locally
 - Strictly edits the `Raindrop` folder—editing other local bookmarks won’t affect your cloud
 
@@ -73,7 +74,7 @@ A tiny helper with one cuddly purpose: **sync your Raindrop.io collections and b
 - **storage** and **unlimitedStorage**: save lightweight sync state locally
 - **notifications**: optional “sync done/failed” toasts
 - **alarms**: schedule periodic syncs
-- **tabs**: used by popup actions to save current/highlighted tabs and to recover Saved Projects into windows
+- **tabs**: used by popup actions to save current/highlighted tabs, ⏫ sync the current window as a project, and recover Saved Projects into windows
 - **Host**: `https://api.raindrop.io/*` only
 
 Privacy promise: your API token stays **local**. No analytics. No tracking. Just syncing. 💙
@@ -82,7 +83,7 @@ Privacy promise: your API token stays **local**. No analytics. No tracking. Just
 
 ## Tips
 
-- Click the toolbar icon to open the popup: Sync now, Save to Unsorted, Save as Project, or Recover a project
+- Click the toolbar icon to open the popup: Sync now, Save to Unsorted, Save as Project, ⏫ Sync current window as project, Recover/Delete a project
 - If you delete the `Raindrop` folder, the next sync will safely recreate it
 - Enable or disable sync notifications in Options
 
