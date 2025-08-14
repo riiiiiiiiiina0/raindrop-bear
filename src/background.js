@@ -357,7 +357,7 @@ async function restoreActionUiForActiveWindow() {
       const pn = projectNameWithoutPrefix(sess.name || '');
       setActionTitle(
         pn
-          ? `Tabs in this window is syncing to ${pn}`
+          ? `Tabs in this window are syncing to ${pn}`
           : 'This window is syncing to a Saved Project',
       );
     } else {
@@ -1696,7 +1696,7 @@ async function startSyncCurrentWindowAsProject(projectName, windowId) {
     const pn = projectNameWithoutPrefix(syncTitle);
     setActionTitle(
       pn
-        ? `Tabs in this window is syncing to ${pn}`
+        ? `Tabs in this window are syncing to ${pn}`
         : 'This window is syncing to a Saved Project',
     );
   } catch (_) {}
