@@ -29,6 +29,7 @@ import {
   clearBadge,
   scheduleClearBadge,
   setActionTitle,
+  flashBadge,
 } from './modules/ui.js';
 import { STORAGE_KEYS, loadState, saveState } from './modules/state.js';
 import {
@@ -169,13 +170,7 @@ async function performSync() {
     try {
       clearBadge();
     } catch (_) {}
-    if (didSucceed) {
-      setBadge('✔️', '#22c55e');
-      scheduleClearBadge(3000);
-    } else {
-      setBadge('😵', '#ef4444');
-      scheduleClearBadge(3000);
-    }
+    flashBadge(didSucceed);
     try {
       await restoreActionUiForActiveWindow(chrome, chromeP);
     } catch (_) {}
@@ -205,9 +200,11 @@ async function saveUrlToUnsorted(url, title) {
     };
     await apiPOST('/raindrop', body);
     notify('Link saved to Unsorted!');
+    flashBadge(true);
   } catch (err) {
     console.error('Failed to save link to Unsorted:', err);
     notify('Error saving link to Unsorted.');
+    flashBadge(false);
   }
 }
 
