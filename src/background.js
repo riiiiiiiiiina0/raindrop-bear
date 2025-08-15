@@ -71,7 +71,6 @@ import {
   overrideCollectionWithWindowTabs,
   restoreActionUiForActiveWindow,
   projectNameWithoutPrefix,
-  startSyncCurrentWindowAsProject,
   startSyncWindowToExistingProject,
 } from './modules/window-sync.js';
 import {
@@ -214,6 +213,21 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   } catch (_) {}
   try {
     await removeLegacyTopFolders();
+  } catch (_) {}
+
+  // Clean up window sync sessions
+  try {
+    await chromeP.storageSet({ [ACTIVE_SYNC_SESSIONS_KEY]: {} });
+    const alarms = await new Promise((resolve) =>
+      chrome.alarms.getAll((as) => resolve(as || [])),
+    );
+    (alarms || []).forEach((a) => {
+      if (a && a.name && a.name.startsWith(WINDOW_SYNC_ALARM_PREFIX)) {
+        try {
+          chrome.alarms.clear(a.name);
+        } catch (_) {}
+      }
+    });
   } catch (_) {}
 
   // Create context menus
@@ -689,44 +703,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message && message.type === 'recoverSavedProject') {
         const id = message && message.id;
         const restoreResult = await recoverSavedProject(chrome, id);
-        if (restoreResult && restoreResult.focusedExisting) {
-          sendResponse({ ok: true });
-          return;
-        }
-        try {
-          const colId = Number(id);
-          if (Number.isFinite(colId)) {
-            const res = await apiGET(
-              `/collection/${encodeURIComponent(colId)}`,
-            );
-            const item = (res && (res.item || res.data || res)) || {};
-            const title = String(item.title || '');
-            const shouldSync = /^\s*⏫?\s+/.test(title);
-            if (shouldSync) {
-              let winId = null;
-              try {
-                const normals = await new Promise((resolve) =>
-                  chrome.windows.getAll({ windowTypes: ['normal'] }, (ws) =>
-                    resolve(ws || []),
-                  ),
-                );
-                if (Array.isArray(normals) && normals.length) {
-                  const lastFocused =
-                    normals.find((w) => w.focused) || normals[0];
-                  winId = lastFocused && lastFocused.id;
-                }
-              } catch (_) {}
-              if (Number.isFinite(Number(winId))) {
-                await startSyncWindowToExistingProject(
-                  chromeP,
-                  colId,
-                  title,
-                  Number(winId),
-                );
-              }
-            }
-          }
-        } catch (_) {}
         sendResponse({ ok: true });
         return;
       }
@@ -747,46 +723,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message && message.type === 'saveHighlightedTabsAsProject') {
         const projectName = (message && message.name) || '';
         await saveHighlightedTabsAsProject(chrome, projectName);
-        sendResponse({ ok: true });
-        return;
-      }
-      if (message && message.type === 'startSyncCurrentWindowAsProject') {
-        const projectName = (message && message.name) || '';
-        let winId = null;
-        try {
-          const tabs = await new Promise((resolve) =>
-            chrome.tabs.query({ active: true, lastFocusedWindow: true }, (ts) =>
-              resolve(ts || []),
-            ),
-          );
-          const t = Array.isArray(tabs) && tabs.length ? tabs[0] : null;
-          if (t && t.windowId != null) winId = Number(t.windowId);
-        } catch (_) {}
-        if (!Number.isFinite(winId)) {
-          const fromSender = sender && sender.tab && sender.tab.windowId;
-          if (Number.isFinite(Number(fromSender))) winId = Number(fromSender);
-        }
-        if (!Number.isFinite(winId)) {
-          try {
-            const normals = await new Promise((resolve) =>
-              chrome.windows.getAll({ windowTypes: ['normal'] }, (ws) =>
-                resolve(ws || []),
-              ),
-            );
-            if (Array.isArray(normals) && normals.length)
-              winId = Number(normals[0].id);
-          } catch (_) {}
-        }
-        if (!Number.isFinite(winId)) {
-          sendResponse({ ok: false, error: 'NO_WINDOW_ID' });
-          return;
-        }
-        await startSyncCurrentWindowAsProject(
-          chrome,
-          chromeP,
-          projectName,
-          Number(winId),
-        );
         sendResponse({ ok: true });
         return;
       }

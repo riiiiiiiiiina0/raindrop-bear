@@ -21,7 +21,7 @@ export const windowSyncSessions = new Map();
 
 export function projectNameWithoutPrefix(name) {
   const s = String(name || '');
-  return s.replace(/^\s*⏫?\s+/, '');
+  return s.trim();
 }
 
 export async function persistActiveSyncSessions(chromeP) {
@@ -103,76 +103,11 @@ export async function restoreActionUiForActiveWindow(chrome, chromeP) {
         chrome.action?.getBadgeText({}, (text) => resolve(text || '')),
       );
     } catch (_) {}
-    const sess = windowSyncSessions.get(Number(winId));
-    if (sess && !sess.stopped) {
-      const wants = '⏫';
-      if (!currentBadge || currentBadge === wants) {
-        setBadge(wants, '#38bdf8');
-      }
-      const pn = projectNameWithoutPrefix(sess.name || '');
-      setActionTitle(
-        pn
-          ? `Tabs in this window are syncing to ${pn}`
-          : 'This window is syncing to a Saved Project',
-      );
-    } else {
-      setActionTitle('Raindrop Bear');
-      if (currentBadge === '⏫') {
-        setBadge('');
-      }
+    setActionTitle('Raindrop Bear');
+    if (currentBadge === '⏫') {
+      setBadge('');
     }
   } catch (_) {}
-}
-
-export async function startSyncCurrentWindowAsProject(
-  chrome,
-  chromeP,
-  projectName,
-  windowId,
-) {
-  const rawName = String(projectName || '').trim();
-  if (!rawName || !Number.isFinite(Number(windowId))) return;
-  const syncTitle = `⏫ ${rawName}`;
-  setBadge('🔄', '#6366f1');
-  try {
-    const pn = projectNameWithoutPrefix(syncTitle);
-    setActionTitle(
-      pn
-        ? `Tabs in this window are syncing to ${pn}`
-        : 'This window is syncing to a Saved Project',
-    );
-  } catch (_) {}
-  try {
-    const collectionId = await createCollectionUnderSavedProjects(syncTitle);
-    await overrideCollectionWithWindowTabs(
-      chrome,
-      Number(collectionId),
-      Number(windowId),
-    );
-    windowSyncSessions.set(Number(windowId), {
-      collectionId: Number(collectionId),
-      windowId: Number(windowId),
-      name: syncTitle,
-    });
-    await persistActiveSyncSessions(chromeP);
-    setBadge('✔️', '#22c55e');
-    scheduleClearBadge(2000);
-    try {
-      await restoreActionUiForActiveWindow(chrome, chromeP);
-    } catch (_) {}
-    try {
-      notify(`Sync started: ${syncTitle}`);
-    } catch (_) {}
-  } catch (e) {
-    setBadge('😵', '#ef4444');
-    scheduleClearBadge(3000);
-    try {
-      notify(`Failed to start sync: ${e}`);
-    } catch (_) {}
-    try {
-      await restoreActionUiForActiveWindow(chrome, chromeP);
-    } catch (_) {}
-  }
 }
 
 export async function startSyncWindowToExistingProject(
