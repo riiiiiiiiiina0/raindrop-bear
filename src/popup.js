@@ -8,9 +8,6 @@
   const saveProjectBtn = /** @type {HTMLButtonElement|null} */ (
     document.getElementById('save-project-btn')
   );
-  const syncWindowProjectBtn = /** @type {HTMLButtonElement|null} */ (
-    document.getElementById('sync-window-project-btn')
-  );
   const statusEl = /** @type {HTMLParagraphElement|null} */ (
     document.getElementById('status')
   );
@@ -21,8 +18,7 @@
   if (
     !(syncBtn instanceof HTMLButtonElement) ||
     !(saveBtn instanceof HTMLButtonElement) ||
-    !(saveProjectBtn instanceof HTMLButtonElement) ||
-    !(syncWindowProjectBtn instanceof HTMLButtonElement)
+    !(saveProjectBtn instanceof HTMLButtonElement)
   )
     return;
 
@@ -131,7 +127,6 @@
       count === 1 ? '📥 Save to unsorted' : `📥 Save ${count} tabs to unsorted`;
     saveProjectBtn.textContent =
       count === 1 ? '🔼 Save as project' : `🔼 Save ${count} tabs as project`;
-    syncWindowProjectBtn.textContent = '⏫ Sync current window as project';
 
     // Load saved projects list
     try {
@@ -261,28 +256,4 @@
     window.close();
   });
 
-  syncWindowProjectBtn.addEventListener('click', async () => {
-    syncWindowProjectBtn.disabled = true;
-    setStatus('Starting sync');
-    const suggested = await computeSuggestedProjectName({
-      highlightedOnly: false,
-    });
-    const name = prompt('Project name?', suggested || undefined);
-    if (name && name.trim()) {
-      let windowId = undefined;
-      try {
-        const win = await new Promise((resolve) =>
-          chrome.windows.getCurrent((w) => resolve(w)),
-        );
-        windowId = win && win.id;
-      } catch (_) {}
-      await sendCommand('startSyncCurrentWindowAsProject', {
-        name: name.trim(),
-        windowId,
-      });
-    }
-    setStatus('');
-    syncWindowProjectBtn.disabled = false;
-    window.close();
-  });
 })();
