@@ -160,19 +160,25 @@ export async function syncNewAndUpdatedItems(
       } else {
         if (!shouldSkipCreate && targetFolderId) {
           try {
-            const createDetails = {
-              parentId: targetFolderId,
-              title: item.title || '',
-              url: item.link || item.url || '',
-            };
-            if (!isInitial) {
-              const current = folderInsertionCount.get(targetFolderId) || 0;
-              folderInsertionCount.set(targetFolderId, current + 1);
-              createDetails.index = current;
+            const children = await chromeP.bookmarksGetChildren(targetFolderId);
+            const url = item.link || item.url || '';
+            const existing = children.find((c) => c.url === url);
+
+            if (!existing) {
+              const createDetails = {
+                parentId: targetFolderId,
+                title: item.title || '',
+                url: url,
+              };
+              if (!isInitial) {
+                const current = folderInsertionCount.get(targetFolderId) || 0;
+                folderInsertionCount.set(targetFolderId, current + 1);
+                createDetails.index = current;
+              }
+              const newNode = await chromeP.bookmarksCreate(createDetails);
+              itemMap[raindropId] = newNode.id;
+              didChange = true;
             }
-            const newNode = await chromeP.bookmarksCreate(createDetails);
-            itemMap[raindropId] = newNode.id;
-            didChange = true;
           } catch (e) {
             if (isUnsorted) {
               try {
@@ -181,19 +187,29 @@ export async function syncNewAndUpdatedItems(
                   getOrCreateChildFolder,
                   collectionMap,
                 );
-                const createDetails = {
-                  parentId: targetFolderId,
-                  title: item.title || '',
-                  url: item.link || item.url || '',
-                };
-                if (!isInitial) {
-                  const current = folderInsertionCount.get(targetFolderId) || 0;
-                  folderInsertionCount.set(targetFolderId, current + 1);
-                  createDetails.index = current;
+
+                const children = await chromeP.bookmarksGetChildren(
+                  targetFolderId,
+                );
+                const url = item.link || item.url || '';
+                const existing = children.find((c) => c.url === url);
+
+                if (!existing) {
+                  const createDetails = {
+                    parentId: targetFolderId,
+                    title: item.title || '',
+                    url: url,
+                  };
+                  if (!isInitial) {
+                    const current =
+                      folderInsertionCount.get(targetFolderId) || 0;
+                    folderInsertionCount.set(targetFolderId, current + 1);
+                    createDetails.index = current;
+                  }
+                  const newNode = await chromeP.bookmarksCreate(createDetails);
+                  itemMap[raindropId] = newNode.id;
+                  didChange = true;
                 }
-                const newNode = await chromeP.bookmarksCreate(createDetails);
-                itemMap[raindropId] = newNode.id;
-                didChange = true;
               } catch (_) {}
             }
           }
