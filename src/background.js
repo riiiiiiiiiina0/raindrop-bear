@@ -191,25 +191,12 @@ async function performSync() {
 
 async function saveUrlToUnsorted(url, title) {
   try {
-    // First, check if a bookmark with this URL already exists anywhere in Raindrop
-    const searchUrl = `/raindrops/0?search=${encodeURIComponent(
-      `link:"${url}"`,
-    )}`;
+    const existing = await apiPOST('/import/url/exists', { urls: [url] });
 
-    const existing = await apiGET(searchUrl);
-    if (existing && existing.items && existing.items.length > 0) {
-      const item = existing.items[0];
-      const collectionId =
-        item.collection?.$id != null
-          ? String(item.collection.$id)
-          : String(item.collectionId || '');
-      if (collectionId === String(UNSORTED_COLLECTION_ID)) {
-        notify('Link is already in Unsorted.');
-      } else {
-        notify('Link already exists in another collection.');
-      }
-      flashBadge(true); // Indicate that the action was acknowledged
-      return;
+    if (existing && existing.result === true && existing.ids && existing.ids.length > 0) {
+        notify('Link already exists.');
+        flashBadge(true);
+        return;
     }
 
     const body = {
