@@ -193,10 +193,15 @@ async function saveUrlToUnsorted(url, title) {
   try {
     const existing = await apiPOST('/import/url/exists', { urls: [url] });
 
-    if (existing && existing.result === true && existing.ids && existing.ids.length > 0) {
-        notify('Link already exists.');
-        flashBadge(true);
-        return;
+    if (
+      existing &&
+      existing.result === true &&
+      existing.ids &&
+      existing.ids.length > 0
+    ) {
+      notify('Link already exists.');
+      flashBadge(true);
+      return;
     }
 
     const body = {
