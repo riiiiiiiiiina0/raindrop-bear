@@ -305,6 +305,32 @@ export async function saveCurrentOrHighlightedTabsToRaindrop(chrome, chromeP) {
     }
     if (titlesAndUrls.length === 0)
       throw new Error('No eligible tabs to save.');
+
+    // Check for existing URLs first
+    const existing = await apiPOST('/import/url/exists', {
+      urls: titlesAndUrls.map(({ url }) => url),
+    });
+
+    // Filter out existing URLs
+    const existingUrls = new Set();
+    if (existing && existing.result === true && existing.ids) {
+      for (let i = 0; i < existing.ids.length; i++) {
+        if (existing.ids[i]) {
+          existingUrls.add(titlesAndUrls[i].url);
+        }
+      }
+    }
+
+    // Filter to only non-existing URLs
+    titlesAndUrls = titlesAndUrls.filter(({ url }) => !existingUrls.has(url));
+
+    if (titlesAndUrls.length === 0) {
+      setBadge('ℹ️', '#3b82f6');
+      scheduleClearBadge(3000);
+      notify('All selected links already exist in Raindrop.');
+      return;
+    }
+
     const state = await loadState();
     const collectionMap = { ...(state.collectionMap || {}) };
     const unsortedFolderId = await ensureUnsortedFolder(
