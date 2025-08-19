@@ -259,7 +259,16 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     console.error('Failed to create context menus:', err);
   }
 
-  if (details && details.reason === 'install') {
+  // show update note on update
+  if (details.reason === 'update') {
+    try {
+      chrome.tabs.create({
+        url: 'https://triiii.notion.site/Hello-from-Raindrop-Bear-2547aa7407c180d28e08f4f6dc41cdfd',
+      });
+    } catch (_) {}
+  }
+  // init after install
+  else if (details.reason === 'install') {
     try {
       const data = await chromeP.storageGet('raindropApiToken');
       const token = (
