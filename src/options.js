@@ -109,10 +109,10 @@ import { fetchGroupsAndCollections } from './modules/collections.js';
       }
     });
 
-  const findDuplicatesEl = /** @type {HTMLButtonElement|null} */ (
+  const findDuplicatesEl = /** @type {HTMLButtonElement} */ (
     document.getElementById('find-duplicates')
   );
-  const duplicatesContainerEl = /** @type {HTMLDivElement|null} */ (
+  const duplicatesContainerEl = /** @type {HTMLDivElement} */ (
     document.getElementById('duplicates-container')
   );
 
@@ -125,21 +125,21 @@ import { fetchGroupsAndCollections } from './modules/collections.js';
 
   async function findAndDisplayDuplicates() {
     findDuplicatesEl.disabled = true;
-    duplicatesContainerEl.innerHTML = '<p class="text-sm">Finding duplicates...</p>';
+    duplicatesContainerEl.innerHTML =
+      '<p class="text-sm">Finding duplicates...</p>';
 
     try {
-      const { rootCollections, childCollections } = await fetchGroupsAndCollections();
+      const { rootCollections, childCollections } =
+        await fetchGroupsAndCollections();
       const collectionIdToName = new Map();
-      for(const c of [...rootCollections, ...childCollections]) {
+      for (const c of [...rootCollections, ...childCollections]) {
         collectionIdToName.set(c._id, c.title);
       }
 
       let allRaindrops = [];
       let page = 0;
       while (true) {
-        const res = await apiGET(
-          `/raindrops/0?perpage=50&page=${page}`
-        );
+        const res = await apiGET(`/raindrops/0?perpage=50&page=${page}`);
         if (res.items.length === 0) {
           break;
         }
@@ -148,17 +148,19 @@ import { fetchGroupsAndCollections } from './modules/collections.js';
       }
 
       const raindropsByCollection = new Map();
-      for(const r of allRaindrops) {
+      for (const r of allRaindrops) {
         const collectionId = r.collection.$id;
-        if(!raindropsByCollection.has(collectionId)) {
+        if (!raindropsByCollection.has(collectionId)) {
           raindropsByCollection.set(collectionId, []);
         }
         raindropsByCollection.get(collectionId).push(r);
       }
 
       let duplicatesByCollection = new Map();
-      for(const [collectionId, raindrops] of raindropsByCollection.entries()) {
-        raindrops.sort((a, b) => new Date(b.lastUpdate) - new Date(a.lastUpdate));
+      for (const [collectionId, raindrops] of raindropsByCollection.entries()) {
+        raindrops.sort(
+          (a, b) => new Date(a.lastUpdate) - new Date(b.lastUpdate),
+        );
         const seenUrls = new Set();
         const collectionDuplicates = [];
         for (const raindrop of raindrops) {
@@ -170,19 +172,28 @@ import { fetchGroupsAndCollections } from './modules/collections.js';
         }
 
         if (collectionDuplicates.length > 0) {
-          const collectionName = collectionIdToName.get(collectionId) || `Collection ${collectionId}`;
-          duplicatesByCollection.set(collectionId, {name: collectionName, duplicates: collectionDuplicates});
+          const collectionName =
+            collectionIdToName.get(collectionId) ||
+            `Collection ${collectionId}`;
+          duplicatesByCollection.set(collectionId, {
+            name: collectionName,
+            duplicates: collectionDuplicates,
+          });
         }
       }
 
       if (duplicatesByCollection.size === 0) {
-        duplicatesContainerEl.innerHTML = '<p class="text-sm">No duplicates found.</p>';
+        duplicatesContainerEl.innerHTML =
+          '<p class="text-sm">No duplicates found.</p>';
         return;
       }
 
       let html = '';
       let allDuplicateIds = [];
-      for (const [collectionId, {name, duplicates}] of duplicatesByCollection.entries()) {
+      for (const [
+        collectionId,
+        { name, duplicates },
+      ] of duplicatesByCollection.entries()) {
         html += `<h3 class="text-lg font-medium mt-4">${name}</h3>`;
         html += '<ul class="list-disc list-inside">';
         for (const dup of duplicates) {
@@ -195,22 +206,31 @@ import { fetchGroupsAndCollections } from './modules/collections.js';
       html += `<button id="remove-duplicates" class="mt-4 inline-flex items-center rounded-lg bg-red-600 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-60">Remove ${allDuplicateIds.length} Duplicates</button>`;
       duplicatesContainerEl.innerHTML = html;
 
-      const removeButton = document.getElementById('remove-duplicates');
+      const removeButton = /** @type {HTMLButtonElement} */ (
+        document.getElementById('remove-duplicates')
+      );
       if (removeButton) {
         removeButton.addEventListener('click', async () => {
           removeButton.disabled = true;
           removeButton.textContent = 'Removing...';
 
           const duplicateIdsByCollection = new Map();
-          for (const [collectionId, {duplicates}] of duplicatesByCollection.entries()) {
-            const ids = duplicates.map(d => d._id);
+          for (const [
+            collectionId,
+            { duplicates },
+          ] of duplicatesByCollection.entries()) {
+            const ids = duplicates.map((d) => d._id);
             duplicateIdsByCollection.set(collectionId, ids);
           }
 
-          for(const [collectionId, ids] of duplicateIdsByCollection.entries()) {
+          for (const [
+            collectionId,
+            ids,
+          ] of duplicateIdsByCollection.entries()) {
             await apiDELETEWithBody(`/raindrops/${collectionId}`, { ids });
           }
 
+          // @ts-ignore
           Toastify({
             text: '✅ Duplicates removed successfully',
             duration: 3000,
@@ -220,7 +240,6 @@ import { fetchGroupsAndCollections } from './modules/collections.js';
           duplicatesContainerEl.innerHTML = '';
         });
       }
-
     } catch (error) {
       duplicatesContainerEl.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Error: ${error.message}</p>`;
     } finally {
@@ -229,7 +248,6 @@ import { fetchGroupsAndCollections } from './modules/collections.js';
   }
 
   findDuplicatesEl.addEventListener('click', findAndDisplayDuplicates);
-
 
   // removed action button preferences
   load();
