@@ -129,41 +129,49 @@ import { fetchGroupsAndCollections } from './modules/collections.js';
 
     try {
       const { rootCollections, childCollections } = await fetchGroupsAndCollections();
-      const allCollections = [...rootCollections, ...childCollections];
-      let duplicatesByCollection = new Map();
+      const collectionIdToName = new Map();
+      for(const c of [...rootCollections, ...childCollections]) {
+        collectionIdToName.set(c._id, c.title);
+      }
 
-      for (const collection of allCollections) {
-        let raindrops = [];
-        let page = 0;
-        while (true) {
-          const res = await apiGET(
-            `/raindrops/${collection._id}?sort=created&perpage=50&page=${page}`
-          );
-          if (res.items.length === 0) {
-            break;
-          }
-          raindrops.push(...res.items);
-          page++;
+      let allRaindrops = [];
+      let page = 0;
+      while (true) {
+        const res = await apiGET(
+          `/raindrops/0?perpage=50&page=${page}`
+        );
+        if (res.items.length === 0) {
+          break;
         }
+        allRaindrops.push(...res.items);
+        page++;
+      }
 
-        const seenUrls = new Map();
+      const raindropsByCollection = new Map();
+      for(const r of allRaindrops) {
+        const collectionId = r.collection.$id;
+        if(!raindropsByCollection.has(collectionId)) {
+          raindropsByCollection.set(collectionId, []);
+        }
+        raindropsByCollection.get(collectionId).push(r);
+      }
+
+      let duplicatesByCollection = new Map();
+      for(const [collectionId, raindrops] of raindropsByCollection.entries()) {
+        raindrops.sort((a, b) => new Date(b.lastUpdate) - new Date(a.lastUpdate));
+        const seenUrls = new Set();
         const collectionDuplicates = [];
         for (const raindrop of raindrops) {
           if (seenUrls.has(raindrop.link)) {
-            const existing = seenUrls.get(raindrop.link);
-            // keep the latest, so if current is newer, it becomes the one to keep
-            if (new Date(raindrop.lastUpdate) > new Date(existing.lastUpdate)) {
-              collectionDuplicates.push(existing);
-              seenUrls.set(raindrop.link, raindrop);
-            } else {
-              collectionDuplicates.push(raindrop);
-            }
+            collectionDuplicates.push(raindrop);
           } else {
-            seenUrls.set(raindrop.link, raindrop);
+            seenUrls.add(raindrop.link);
           }
         }
+
         if (collectionDuplicates.length > 0) {
-          duplicatesByCollection.set(collection._id, {name: collection.title, duplicates: collectionDuplicates});
+          const collectionName = collectionIdToName.get(collectionId) || `Collection ${collectionId}`;
+          duplicatesByCollection.set(collectionId, {name: collectionName, duplicates: collectionDuplicates});
         }
       }
 
