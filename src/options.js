@@ -1,3 +1,6 @@
+import { apiGET, apiDELETEWithBody } from './modules/raindrop.js';
+import { fetchGroupsAndCollections } from './modules/collections.js';
+
 /* global Toastify */
 (() => {
   const formEl = /** @type {HTMLFormElement|null} */ (
@@ -105,6 +108,120 @@
         }
       }
     });
+
+  const findDuplicatesEl = /** @type {HTMLButtonElement|null} */ (
+    document.getElementById('find-duplicates')
+  );
+  const duplicatesContainerEl = /** @type {HTMLDivElement|null} */ (
+    document.getElementById('duplicates-container')
+  );
+
+  if (
+    !(findDuplicatesEl instanceof HTMLButtonElement) ||
+    !(duplicatesContainerEl instanceof HTMLDivElement)
+  ) {
+    return;
+  }
+
+  async function findAndDisplayDuplicates() {
+    findDuplicatesEl.disabled = true;
+    duplicatesContainerEl.innerHTML = '<p class="text-sm">Finding duplicates...</p>';
+
+    try {
+      const { rootCollections, childCollections } = await fetchGroupsAndCollections();
+      const allCollections = [...rootCollections, ...childCollections];
+      let duplicatesByCollection = new Map();
+
+      for (const collection of allCollections) {
+        let raindrops = [];
+        let page = 0;
+        while (true) {
+          const res = await apiGET(
+            `/raindrops/${collection._id}?sort=created&perpage=50&page=${page}`
+          );
+          if (res.items.length === 0) {
+            break;
+          }
+          raindrops.push(...res.items);
+          page++;
+        }
+
+        const seenUrls = new Map();
+        const collectionDuplicates = [];
+        for (const raindrop of raindrops) {
+          if (seenUrls.has(raindrop.link)) {
+            const existing = seenUrls.get(raindrop.link);
+            // keep the latest, so if current is newer, it becomes the one to keep
+            if (new Date(raindrop.lastUpdate) > new Date(existing.lastUpdate)) {
+              collectionDuplicates.push(existing);
+              seenUrls.set(raindrop.link, raindrop);
+            } else {
+              collectionDuplicates.push(raindrop);
+            }
+          } else {
+            seenUrls.set(raindrop.link, raindrop);
+          }
+        }
+        if (collectionDuplicates.length > 0) {
+          duplicatesByCollection.set(collection._id, {name: collection.title, duplicates: collectionDuplicates});
+        }
+      }
+
+      if (duplicatesByCollection.size === 0) {
+        duplicatesContainerEl.innerHTML = '<p class="text-sm">No duplicates found.</p>';
+        return;
+      }
+
+      let html = '';
+      let allDuplicateIds = [];
+      for (const [collectionId, {name, duplicates}] of duplicatesByCollection.entries()) {
+        html += `<h3 class="text-lg font-medium mt-4">${name}</h3>`;
+        html += '<ul class="list-disc list-inside">';
+        for (const dup of duplicates) {
+          html += `<li class="text-sm"><a href="${dup.link}" target="_blank" class="text-blue-600 hover:underline dark:text-blue-400">${dup.title}</a></li>`;
+          allDuplicateIds.push(dup._id);
+        }
+        html += '</ul>';
+      }
+
+      html += `<button id="remove-duplicates" class="mt-4 inline-flex items-center rounded-lg bg-red-600 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-60">Remove ${allDuplicateIds.length} Duplicates</button>`;
+      duplicatesContainerEl.innerHTML = html;
+
+      const removeButton = document.getElementById('remove-duplicates');
+      if (removeButton) {
+        removeButton.addEventListener('click', async () => {
+          removeButton.disabled = true;
+          removeButton.textContent = 'Removing...';
+
+          const duplicateIdsByCollection = new Map();
+          for (const [collectionId, {duplicates}] of duplicatesByCollection.entries()) {
+            const ids = duplicates.map(d => d._id);
+            duplicateIdsByCollection.set(collectionId, ids);
+          }
+
+          for(const [collectionId, ids] of duplicateIdsByCollection.entries()) {
+            await apiDELETEWithBody(`/raindrops/${collectionId}`, { ids });
+          }
+
+          Toastify({
+            text: '✅ Duplicates removed successfully',
+            duration: 3000,
+            position: 'right',
+            style: { background: '#22c55e' },
+          }).showToast();
+          duplicatesContainerEl.innerHTML = '';
+        });
+      }
+
+    } catch (error) {
+      duplicatesContainerEl.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Error: ${error.message}</p>`;
+    } finally {
+      findDuplicatesEl.disabled = false;
+    }
+  }
+
+  findDuplicatesEl.addEventListener('click', findAndDisplayDuplicates);
+
 
   // removed action button preferences
   load();
