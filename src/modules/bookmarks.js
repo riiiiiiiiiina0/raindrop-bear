@@ -38,19 +38,47 @@ export async function getOrCreateRootFolder(loadState, saveState) {
       if (nodes && nodes.length) return state.rootFolderId;
     } catch (_) {}
   }
-  const barId = await getBookmarksBarFolderId();
-  const children = await chromeP.bookmarksGetChildren(barId);
+
+  // Use the parent folder ID from state, or default to the bookmarks bar
+  const parentFolderId =
+    state.parentFolderId || (await getBookmarksBarFolderId());
+
+  const children = await chromeP.bookmarksGetChildren(parentFolderId);
   const existing = children.find((c) => c.title === ROOT_FOLDER_NAME && !c.url);
   if (existing) {
     await saveState({ rootFolderId: existing.id });
     return existing.id;
   }
   const node = await chromeP.bookmarksCreate({
-    parentId: barId,
+    parentId: parentFolderId,
     title: ROOT_FOLDER_NAME,
   });
   await saveState({ rootFolderId: node.id });
   return node.id;
+}
+
+/**
+ * Recursively gets all bookmark folders.
+ *
+ * @returns {Promise<chrome.bookmarks.BookmarkTreeNode[]>} A list of all bookmark folders.
+ */
+export async function getAllBookmarkFolders() {
+  const tree = await chromeP.bookmarksGetTree();
+  const folders = [];
+
+  function findFolders(node) {
+    if (node.children) {
+      for (const child of node.children) {
+        if (!child.url) { // it's a folder
+          folders.push(child);
+          findFolders(child);
+        }
+      }
+    }
+  }
+
+  findFolders(tree[0]);
+  return folders;
 }
 
 /**

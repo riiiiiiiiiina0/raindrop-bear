@@ -1,5 +1,8 @@
 import { apiGET, apiDELETEWithBody } from './modules/raindrop.js';
 import { fetchGroupsAndCollections } from './modules/collections.js';
+import { getAllBookmarkFolders, getBookmarksBarFolderId } from './modules/bookmarks.js';
+import { chromeP } from './modules/chrome.js';
+import { loadState, saveState } from './modules/state.js';
 
 /* global Toastify */
 (() => {
@@ -21,6 +24,12 @@ import { fetchGroupsAndCollections } from './modules/collections.js';
   const notifyStatusEl = /** @type {HTMLSpanElement|null} */ (
     document.getElementById('notify-status')
   );
+  const parentFolderEl = /** @type {HTMLSelectElement|null} */ (
+    document.getElementById('parent-folder')
+  );
+  const parentFolderStatusEl = /** @type {HTMLSpanElement|null} */ (
+    document.getElementById('parent-folder-status')
+  );
 
   if (
     !(formEl instanceof HTMLFormElement) ||
@@ -28,23 +37,67 @@ import { fetchGroupsAndCollections } from './modules/collections.js';
     !(saveEl instanceof HTMLButtonElement) ||
     !(statusEl instanceof HTMLSpanElement) ||
     !(notifyEl instanceof HTMLInputElement) ||
-    !(notifyStatusEl instanceof HTMLSpanElement)
+    !(notifyStatusEl instanceof HTMLSpanElement) ||
+    !(parentFolderEl instanceof HTMLSelectElement) ||
+    !(parentFolderStatusEl instanceof HTMLSpanElement)
   ) {
     // DOM not ready; abort quietly
     return;
   }
 
-  function load() {
+  async function load() {
     try {
-      chrome.storage.local.get(['raindropApiToken', 'notifyOnSync'], (data) => {
-        if (tokenEl) tokenEl.value = (data && data.raindropApiToken) || '';
-        const enabled =
-          data && typeof data.notifyOnSync === 'boolean'
-            ? data.notifyOnSync
-            : true; // default ON
-        if (notifyEl) notifyEl.checked = !!enabled;
+      const data = await chromeP.storageGet(['raindropApiToken', 'notifyOnSync', 'parentFolderId', 'rootFolderId']);
+      if (tokenEl) tokenEl.value = (data && data.raindropApiToken) || '';
+      const enabled =
+        data && typeof data.notifyOnSync === 'boolean'
+          ? data.notifyOnSync
+          : true; // default ON
+      if (notifyEl) notifyEl.checked = !!enabled;
+
+      const folders = await getAllBookmarkFolders();
+      const bookmarksBarId = await getBookmarksBarFolderId();
+      parentFolderEl.innerHTML = '';
+      folders.forEach(folder => {
+        const option = document.createElement('option');
+        option.value = folder.id;
+        option.textContent = folder.title;
+        parentFolderEl.appendChild(option);
       });
-    } catch (_) {}
+
+      parentFolderEl.value = data.parentFolderId || bookmarksBarId;
+
+      parentFolderEl.addEventListener('change', async () => {
+        const newParentId = parentFolderEl.value;
+        await saveState({ parentFolderId: newParentId });
+
+        try {
+          const { rootFolderId } = await loadState();
+          if (rootFolderId) {
+            await chromeP.bookmarksMove(rootFolderId, { parentId: newParentId });
+          }
+          /** @type {any} */(window)
+            .Toastify({
+              text: '📂 Parent folder updated',
+              duration: 3000,
+              position: 'right',
+              style: { background: '#3b82f6' },
+            })
+            .showToast();
+        } catch (error) {
+          console.error('Failed to move Raindrop folder:', error);
+          /** @type {any} */(window)
+            .Toastify({
+              text: 'Failed to move Raindrop folder.',
+              duration: 3000,
+              position: 'right',
+              style: { background: '#ef4444' },
+            })
+            .showToast();
+        }
+      });
+
+    } catch (_) { }
   }
 
   function save() {
