@@ -234,9 +234,11 @@ import { loadState, saveState } from './modules/state.js';
         }
 
         if (collectionDuplicates.length > 0) {
-          const collectionName =
-            collectionIdToName.get(collectionId) ||
-            `Collection ${collectionId}`;
+          let collectionName = collectionIdToName.get(collectionId);
+          if (!collectionName) {
+            if (collectionId === -1) collectionName = 'Unsorted';
+            else collectionName = `Collection ${collectionId}`;
+          }
           duplicatesByCollection.set(collectionId, {
             name: collectionName,
             duplicates: collectionDuplicates,
