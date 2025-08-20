@@ -7,6 +7,7 @@ Why you’ll love it
 🌩️ One‑way sync: mirrors cloud → local under a managed Raindrop folder  
 🗂️ Mirrors your structure: groups become folders, collections become subfolders  
 ⏰ Auto‑sync every ~10 minutes: or run a manual sync from the popup  
+📁 Choose parent folder: place the Raindrop folder wherever you like (Bookmarks Bar by default)  
 📂 Unsorted handled: items in Raindrop “Unsorted” go to a matching Unsorted folder  
 💾 Saved Projects: save highlighted tabs as a named project in Raindrop, then recover it later from the popup  
 ⏫ Live window sync: keep a Raindrop project in sync with your current window’s tabs until you stop it  
@@ -16,7 +17,7 @@ Simple setup
 
 1. Install and open the extension’s Options
 2. Paste your Raindrop API token (find it at https://app.raindrop.io/settings/integrations)
-3. That’s it — your Raindrop folder appears in the Bookmarks Bar
+3. That’s it — your Raindrop folder appears where you chose (Bookmarks Bar by default)
 
 Popup actions
 
