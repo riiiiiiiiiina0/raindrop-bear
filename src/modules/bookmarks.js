@@ -1,4 +1,5 @@
 import { chromeP } from './chrome.js';
+import { loadState } from './state.js';
 
 export const ROOT_FOLDER_NAME = 'Raindrop';
 export const UNSORTED_COLLECTION_ID = -1;
@@ -38,19 +39,54 @@ export async function getOrCreateRootFolder(loadState, saveState) {
       if (nodes && nodes.length) return state.rootFolderId;
     } catch (_) {}
   }
-  const barId = await getBookmarksBarFolderId();
-  const children = await chromeP.bookmarksGetChildren(barId);
+
+  // Use the parent folder ID from state, or default to the bookmarks bar
+  const parentFolderId =
+    state.parentFolderId || (await getBookmarksBarFolderId());
+
+  const children = await chromeP.bookmarksGetChildren(parentFolderId);
   const existing = children.find((c) => c.title === ROOT_FOLDER_NAME && !c.url);
   if (existing) {
     await saveState({ rootFolderId: existing.id });
     return existing.id;
   }
   const node = await chromeP.bookmarksCreate({
-    parentId: barId,
+    parentId: parentFolderId,
     title: ROOT_FOLDER_NAME,
   });
   await saveState({ rootFolderId: node.id });
   return node.id;
+}
+
+/**
+ * Recursively gets all bookmark folders.
+ *
+ * @returns {Promise<{folder: chrome.bookmarks.BookmarkTreeNode, path: string}[]>}> A list of all bookmark folders with their full path.
+ */
+export async function getAllBookmarkFolders() {
+  // Fetch bookmark tree and current Raindrop root folder id (if any)
+  const { rootFolderId } = await loadState();
+
+  const tree = await chromeP.bookmarksGetTree();
+  const folders = [];
+
+  function findFolders(node, parentPath) {
+    if (!node?.children) return;
+    for (const child of node.children) {
+      // Skip bookmark nodes (those having url) and the Raindrop root folder subtree
+      if (child.url) continue;
+      if (rootFolderId && child.id === rootFolderId) {
+        // Do not include the Raindrop root folder or traverse into it
+        continue;
+      }
+      const path = `${parentPath} / ${child.title}`;
+      folders.push({ folder: child, path });
+      findFolders(child, path);
+    }
+  }
+
+  findFolders(tree[0], '');
+  return folders;
 }
 
 /**

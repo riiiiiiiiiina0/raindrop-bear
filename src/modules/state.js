@@ -6,6 +6,7 @@ export const STORAGE_KEYS = {
   groupMap: 'groupMap',
   itemMap: 'itemMap',
   rootFolderId: 'rootFolderId',
+  parentFolderId: 'parentFolderId',
 };
 
 export async function loadState() {
@@ -15,6 +16,7 @@ export async function loadState() {
     STORAGE_KEYS.groupMap,
     STORAGE_KEYS.itemMap,
     STORAGE_KEYS.rootFolderId,
+    STORAGE_KEYS.parentFolderId,
   ]);
   return {
     lastSync: data[STORAGE_KEYS.lastSync] || null,
@@ -22,6 +24,7 @@ export async function loadState() {
     groupMap: data[STORAGE_KEYS.groupMap] || {},
     itemMap: data[STORAGE_KEYS.itemMap] || {},
     rootFolderId: data[STORAGE_KEYS.rootFolderId] || null,
+    parentFolderId: data[STORAGE_KEYS.parentFolderId] || null,
   };
 }
 

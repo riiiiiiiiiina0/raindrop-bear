@@ -259,8 +259,13 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     console.error('Failed to create context menus:', err);
   }
 
+  const isUpdate = details.reason === 'update';
+  const [major, minor, patch] =
+    details.previousVersion?.split('.').map(Number) || [];
+  const shouldShowUpdateNote = isUpdate && major === 1 && minor < 53;
+
   // show update note on update
-  if (details.reason === 'update') {
+  if (shouldShowUpdateNote) {
     try {
       chrome.tabs.create({
         url: 'https://triiii.notion.site/Hello-from-Raindrop-Bear-2547aa7407c180d28e08f4f6dc41cdfd',

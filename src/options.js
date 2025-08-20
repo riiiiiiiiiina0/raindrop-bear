@@ -1,5 +1,11 @@
 import { apiGET, apiDELETEWithBody } from './modules/raindrop.js';
 import { fetchGroupsAndCollections } from './modules/collections.js';
+import {
+  getAllBookmarkFolders,
+  getBookmarksBarFolderId,
+} from './modules/bookmarks.js';
+import { chromeP } from './modules/chrome.js';
+import { loadState, saveState } from './modules/state.js';
 
 /* global Toastify */
 (() => {
@@ -21,6 +27,12 @@ import { fetchGroupsAndCollections } from './modules/collections.js';
   const notifyStatusEl = /** @type {HTMLSpanElement|null} */ (
     document.getElementById('notify-status')
   );
+  const parentFolderEl = /** @type {HTMLSelectElement} */ (
+    document.getElementById('parent-folder')
+  );
+  const parentFolderStatusEl = /** @type {HTMLSpanElement|null} */ (
+    document.getElementById('parent-folder-status')
+  );
 
   if (
     !(formEl instanceof HTMLFormElement) ||
@@ -28,21 +40,71 @@ import { fetchGroupsAndCollections } from './modules/collections.js';
     !(saveEl instanceof HTMLButtonElement) ||
     !(statusEl instanceof HTMLSpanElement) ||
     !(notifyEl instanceof HTMLInputElement) ||
-    !(notifyStatusEl instanceof HTMLSpanElement)
+    !(notifyStatusEl instanceof HTMLSpanElement) ||
+    !(parentFolderEl instanceof HTMLSelectElement) ||
+    !(parentFolderStatusEl instanceof HTMLSpanElement)
   ) {
     // DOM not ready; abort quietly
     return;
   }
 
-  function load() {
+  async function load() {
     try {
-      chrome.storage.local.get(['raindropApiToken', 'notifyOnSync'], (data) => {
-        if (tokenEl) tokenEl.value = (data && data.raindropApiToken) || '';
-        const enabled =
-          data && typeof data.notifyOnSync === 'boolean'
-            ? data.notifyOnSync
-            : true; // default ON
-        if (notifyEl) notifyEl.checked = !!enabled;
+      const data = await chromeP.storageGet([
+        'raindropApiToken',
+        'notifyOnSync',
+        'parentFolderId',
+        'rootFolderId',
+      ]);
+      if (tokenEl) tokenEl.value = (data && data.raindropApiToken) || '';
+      const enabled =
+        data && typeof data.notifyOnSync === 'boolean'
+          ? data.notifyOnSync
+          : true; // default ON
+      if (notifyEl) notifyEl.checked = !!enabled;
+
+      const folders = await getAllBookmarkFolders();
+      const bookmarksBarId = await getBookmarksBarFolderId();
+      parentFolderEl.innerHTML = '';
+      folders.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.folder.id;
+        option.textContent = item.path;
+        parentFolderEl.appendChild(option);
+      });
+
+      parentFolderEl.value = data.parentFolderId || bookmarksBarId;
+
+      parentFolderEl.addEventListener('change', async () => {
+        const newParentId = parentFolderEl.value;
+        await saveState({ parentFolderId: newParentId });
+
+        try {
+          const { rootFolderId } = await loadState();
+          if (rootFolderId) {
+            await chromeP.bookmarksMove(rootFolderId, {
+              parentId: newParentId,
+            });
+          }
+          /** @type {any} */ (window)
+            .Toastify({
+              text: '📂 Parent folder updated',
+              duration: 3000,
+              position: 'right',
+              style: { background: '#3b82f6' },
+            })
+            .showToast();
+        } catch (error) {
+          console.error('Failed to move Raindrop folder:', error);
+          /** @type {any} */ (window)
+            .Toastify({
+              text: 'Failed to move Raindrop folder.',
+              duration: 3000,
+              position: 'right',
+              style: { background: '#ef4444' },
+            })
+            .showToast();
+        }
       });
     } catch (_) {}
   }
@@ -159,7 +221,8 @@ import { fetchGroupsAndCollections } from './modules/collections.js';
       let duplicatesByCollection = new Map();
       for (const [collectionId, raindrops] of raindropsByCollection.entries()) {
         raindrops.sort(
-          (a, b) => new Date(a.lastUpdate) - new Date(b.lastUpdate),
+          (a, b) =>
+            new Date(a.lastUpdate).getTime() - new Date(b.lastUpdate).getTime(),
         );
         const seenUrls = new Set();
         const collectionDuplicates = [];
@@ -172,9 +235,11 @@ import { fetchGroupsAndCollections } from './modules/collections.js';
         }
 
         if (collectionDuplicates.length > 0) {
-          const collectionName =
-            collectionIdToName.get(collectionId) ||
-            `Collection ${collectionId}`;
+          let collectionName = collectionIdToName.get(collectionId);
+          if (!collectionName) {
+            if (collectionId === -1) collectionName = 'Unsorted';
+            else collectionName = `Collection ${collectionId}`;
+          }
           duplicatesByCollection.set(collectionId, {
             name: collectionName,
             duplicates: collectionDuplicates,

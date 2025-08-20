@@ -14,6 +14,7 @@ A tiny helper with one cuddly purpose: **sync your Raindrop.io collections and b
 - 💾 **Saved Projects:** Capture a set of tabs as a named project under a special Raindrop group "Saved Projects" and reopen later from the popup
 - 🛡️ **Smarter sync:** Now one‑way mirroring (Raindrop → local). The "Saved Projects" group is excluded from local bookmarks mirroring (kept cloud‑only), reducing clutter
 - ✨ **Options UI & notifications:** Clean setup flow and optional success/failure toast after sync
+- 📂 **Choose parent folder:** Pick where the managed `Raindrop` folder lives (defaults to Bookmarks Bar)
 
 ---
 
@@ -26,7 +27,7 @@ A tiny helper with one cuddly purpose: **sync your Raindrop.io collections and b
 ## What it does
 
 - **One‑way sync:** Mirrors Raindrop → your local browser bookmarks under the managed `Raindrop` folder (local edits aren’t mirrored back)
-- Creates a `Raindrop` folder in your Bookmarks Bar, mirroring your groups and collections
+- Creates a `Raindrop` folder inside a parent folder you choose (defaults to Bookmarks Bar), mirroring your groups and collections
 - Keeps things fresh automatically every \~10 minutes, or run a manual sync from the popup
 - **Save to Unsorted:** From the popup, send the current/highlighted tabs to Raindrop’s Unsorted
 - **Saved Projects:** Save highlighted tabs as a project in Raindrop → later, recover it from the popup (restores grouping/order)
