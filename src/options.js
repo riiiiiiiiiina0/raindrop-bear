@@ -1,6 +1,9 @@
 import { apiGET, apiDELETEWithBody } from './modules/raindrop.js';
 import { fetchGroupsAndCollections } from './modules/collections.js';
-import { getAllBookmarkFolders, getBookmarksBarFolderId } from './modules/bookmarks.js';
+import {
+  getAllBookmarkFolders,
+  getBookmarksBarFolderId,
+} from './modules/bookmarks.js';
 import { chromeP } from './modules/chrome.js';
 import { loadState, saveState } from './modules/state.js';
 
@@ -24,7 +27,7 @@ import { loadState, saveState } from './modules/state.js';
   const notifyStatusEl = /** @type {HTMLSpanElement|null} */ (
     document.getElementById('notify-status')
   );
-  const parentFolderEl = /** @type {HTMLSelectElement|null} */ (
+  const parentFolderEl = /** @type {HTMLSelectElement} */ (
     document.getElementById('parent-folder')
   );
   const parentFolderStatusEl = /** @type {HTMLSpanElement|null} */ (
@@ -47,7 +50,12 @@ import { loadState, saveState } from './modules/state.js';
 
   async function load() {
     try {
-      const data = await chromeP.storageGet(['raindropApiToken', 'notifyOnSync', 'parentFolderId', 'rootFolderId']);
+      const data = await chromeP.storageGet([
+        'raindropApiToken',
+        'notifyOnSync',
+        'parentFolderId',
+        'rootFolderId',
+      ]);
       if (tokenEl) tokenEl.value = (data && data.raindropApiToken) || '';
       const enabled =
         data && typeof data.notifyOnSync === 'boolean'
@@ -58,10 +66,10 @@ import { loadState, saveState } from './modules/state.js';
       const folders = await getAllBookmarkFolders();
       const bookmarksBarId = await getBookmarksBarFolderId();
       parentFolderEl.innerHTML = '';
-      folders.forEach(folder => {
+      folders.forEach((item) => {
         const option = document.createElement('option');
-        option.value = folder.id;
-        option.textContent = folder.title;
+        option.value = item.folder.id;
+        option.textContent = item.path;
         parentFolderEl.appendChild(option);
       });
 
@@ -74,9 +82,11 @@ import { loadState, saveState } from './modules/state.js';
         try {
           const { rootFolderId } = await loadState();
           if (rootFolderId) {
-            await chromeP.bookmarksMove(rootFolderId, { parentId: newParentId });
+            await chromeP.bookmarksMove(rootFolderId, {
+              parentId: newParentId,
+            });
           }
-          /** @type {any} */(window)
+          /** @type {any} */ (window)
             .Toastify({
               text: '📂 Parent folder updated',
               duration: 3000,
@@ -86,7 +96,7 @@ import { loadState, saveState } from './modules/state.js';
             .showToast();
         } catch (error) {
           console.error('Failed to move Raindrop folder:', error);
-          /** @type {any} */(window)
+          /** @type {any} */ (window)
             .Toastify({
               text: 'Failed to move Raindrop folder.',
               duration: 3000,
@@ -96,8 +106,7 @@ import { loadState, saveState } from './modules/state.js';
             .showToast();
         }
       });
-
-    } catch (_) { }
+    } catch (_) {}
   }
 
   function save() {

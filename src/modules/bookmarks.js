@@ -1,4 +1,5 @@
 import { chromeP } from './chrome.js';
+import { loadState } from './state.js';
 
 export const ROOT_FOLDER_NAME = 'Raindrop';
 export const UNSORTED_COLLECTION_ID = -1;
@@ -60,24 +61,31 @@ export async function getOrCreateRootFolder(loadState, saveState) {
 /**
  * Recursively gets all bookmark folders.
  *
- * @returns {Promise<chrome.bookmarks.BookmarkTreeNode[]>} A list of all bookmark folders.
+ * @returns {Promise<{folder: chrome.bookmarks.BookmarkTreeNode, path: string}[]>}> A list of all bookmark folders with their full path.
  */
 export async function getAllBookmarkFolders() {
+  // Fetch bookmark tree and current Raindrop root folder id (if any)
+  const { rootFolderId } = await loadState();
+
   const tree = await chromeP.bookmarksGetTree();
   const folders = [];
 
-  function findFolders(node) {
-    if (node.children) {
-      for (const child of node.children) {
-        if (!child.url) { // it's a folder
-          folders.push(child);
-          findFolders(child);
-        }
+  function findFolders(node, parentPath) {
+    if (!node?.children) return;
+    for (const child of node.children) {
+      // Skip bookmark nodes (those having url) and the Raindrop root folder subtree
+      if (child.url) continue;
+      if (rootFolderId && child.id === rootFolderId) {
+        // Do not include the Raindrop root folder or traverse into it
+        continue;
       }
+      const path = `${parentPath} / ${child.title}`;
+      folders.push({ folder: child, path });
+      findFolders(child, path);
     }
   }
 
-  findFolders(tree[0]);
+  findFolders(tree[0], '');
   return folders;
 }
 
