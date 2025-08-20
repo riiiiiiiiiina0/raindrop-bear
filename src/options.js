@@ -221,7 +221,8 @@ import { loadState, saveState } from './modules/state.js';
       let duplicatesByCollection = new Map();
       for (const [collectionId, raindrops] of raindropsByCollection.entries()) {
         raindrops.sort(
-          (a, b) => new Date(a.lastUpdate) - new Date(b.lastUpdate),
+          (a, b) =>
+            new Date(a.lastUpdate).getTime() - new Date(b.lastUpdate).getTime(),
         );
         const seenUrls = new Set();
         const collectionDuplicates = [];
