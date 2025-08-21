@@ -404,39 +404,39 @@ chrome.bookmarks?.onCreated.addListener(async (id, node) => {
 });
 
 chrome.bookmarks?.onRemoved.addListener(async (id) => {
-  try {
-    if (isSyncing || suppressLocalBookmarkEvents) return;
-    const state = await loadState();
-    if (state.rootFolderId) {
-      try {
-        const nodes = await chromeP.bookmarksGet(String(state.rootFolderId));
-        if (!nodes || nodes.length === 0) return;
-      } catch (_) {
-        return;
-      }
-    }
-    const itemMap = { ...(state.itemMap || {}) };
-    const collectionMap = { ...(state.collectionMap || {}) };
-    const itemByLocal = invertRecord(itemMap);
-    const collectionByLocal = invertRecord(collectionMap);
-    if (itemByLocal[String(id)]) {
-      const raindropId = itemByLocal[String(id)];
-      try {
-        await apiDELETE(`/raindrop/${encodeURIComponent(raindropId)}`);
-      } catch (_) {}
-      delete itemMap[String(raindropId)];
-      await saveState({ itemMap });
-      return;
-    }
-    if (collectionByLocal[String(id)]) {
-      const collectionId = collectionByLocal[String(id)];
-      try {
-        await apiDELETE(`/collection/${encodeURIComponent(collectionId)}`);
-      } catch (_) {}
-      delete collectionMap[String(collectionId)];
-      await saveState({ collectionMap });
-    }
-  } catch (_) {}
+  // try {
+  //   if (isSyncing || suppressLocalBookmarkEvents) return;
+  //   const state = await loadState();
+  //   if (state.rootFolderId) {
+  //     try {
+  //       const nodes = await chromeP.bookmarksGet(String(state.rootFolderId));
+  //       if (!nodes || nodes.length === 0) return;
+  //     } catch (_) {
+  //       return;
+  //     }
+  //   }
+  //   const itemMap = { ...(state.itemMap || {}) };
+  //   const collectionMap = { ...(state.collectionMap || {}) };
+  //   const itemByLocal = invertRecord(itemMap);
+  //   const collectionByLocal = invertRecord(collectionMap);
+  //   if (itemByLocal[String(id)]) {
+  //     const raindropId = itemByLocal[String(id)];
+  //     try {
+  //       await apiDELETE(`/raindrop/${encodeURIComponent(raindropId)}`);
+  //     } catch (_) {}
+  //     delete itemMap[String(raindropId)];
+  //     await saveState({ itemMap });
+  //     return;
+  //   }
+  //   if (collectionByLocal[String(id)]) {
+  //     const collectionId = collectionByLocal[String(id)];
+  //     try {
+  //       await apiDELETE(`/collection/${encodeURIComponent(collectionId)}`);
+  //     } catch (_) {}
+  //     delete collectionMap[String(collectionId)];
+  //     await saveState({ collectionMap });
+  //   }
+  // } catch (_) {}
 });
 
 chrome.bookmarks?.onChanged.addListener(async (id, changeInfo) => {
