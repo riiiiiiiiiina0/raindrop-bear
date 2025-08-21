@@ -1,5 +1,7 @@
 import { chromeP } from './chrome.js';
 import { loadState } from './state.js';
+import { getFoldersByTitle } from './collections.js';
+import { isDescendant } from './utils.js';
 
 export const ROOT_FOLDER_NAME = 'Raindrop';
 export const UNSORTED_COLLECTION_ID = -1;
@@ -33,10 +35,18 @@ export async function getBookmarksBarFolderId() {
  */
 export async function getOrCreateRootFolder(loadState, saveState) {
   const state = await loadState();
+  const deletedFolderIds = await getFoldersByTitle('Deleted');
+
   if (state.rootFolderId) {
     try {
       const nodes = await chromeP.bookmarksGet(state.rootFolderId);
-      if (nodes && nodes.length) return state.rootFolderId;
+      if (
+        nodes &&
+        nodes.length &&
+        !isDescendant(nodes[0].id, deletedFolderIds)
+      ) {
+        return state.rootFolderId;
+      }
     } catch (_) {}
   }
 
@@ -45,11 +55,15 @@ export async function getOrCreateRootFolder(loadState, saveState) {
     state.parentFolderId || (await getBookmarksBarFolderId());
 
   const children = await chromeP.bookmarksGetChildren(parentFolderId);
-  const existing = children.find((c) => c.title === ROOT_FOLDER_NAME && !c.url);
-  if (existing) {
-    await saveState({ rootFolderId: existing.id });
-    return existing.id;
+  for (const c of children) {
+    if (c.title === ROOT_FOLDER_NAME && !c.url) {
+      if (!isDescendant(c.id, deletedFolderIds)) {
+        await saveState({ rootFolderId: c.id });
+        return c.id;
+      }
+    }
   }
+
   const node = await chromeP.bookmarksCreate({
     parentId: parentFolderId,
     title: ROOT_FOLDER_NAME,
@@ -64,28 +78,28 @@ export async function getOrCreateRootFolder(loadState, saveState) {
  * @returns {Promise<{folder: chrome.bookmarks.BookmarkTreeNode, path: string}[]>}> A list of all bookmark folders with their full path.
  */
 export async function getAllBookmarkFolders() {
-  // Fetch bookmark tree and current Raindrop root folder id (if any)
   const { rootFolderId } = await loadState();
-
+  const deletedFolderIds = await getFoldersByTitle('Deleted');
   const tree = await chromeP.bookmarksGetTree();
   const folders = [];
 
-  function findFolders(node, parentPath) {
+  async function findFolders(node, parentPath) {
     if (!node?.children) return;
     for (const child of node.children) {
-      // Skip bookmark nodes (those having url) and the Raindrop root folder subtree
       if (child.url) continue;
-      if (rootFolderId && child.id === rootFolderId) {
-        // Do not include the Raindrop root folder or traverse into it
-        continue;
-      }
+      if (rootFolderId && child.id === rootFolderId) continue;
+      if (deletedFolderIds.includes(child.id)) continue;
+      if (await isDescendant(child.id, deletedFolderIds)) continue;
+
       const path = `${parentPath} / ${child.title}`;
       folders.push({ folder: child, path });
-      findFolders(child, path);
+      await findFolders(child, path);
     }
   }
 
-  findFolders(tree[0], '');
+  if (tree && tree.length > 0) {
+    await findFolders(tree[0], '');
+  }
   return folders;
 }
 

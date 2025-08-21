@@ -1,5 +1,32 @@
 // Groups and collections fetching and indexing utilities
+import { chromeP } from './chrome.js';
 import { apiGET } from './api-facade.js';
+
+/**
+ * Recursively finds all bookmark folders with a specific title.
+ *
+ * @param {string} title The title of the folder to find.
+ * @returns {Promise<string[]>} A list of IDs of the found folders.
+ */
+export async function getFoldersByTitle(title) {
+  const tree = await chromeP.bookmarksGetTree();
+  const folders = [];
+
+  function findFolders(node) {
+    if (!node?.children) return;
+    for (const child of node.children) {
+      if (!child.url && child.title === title) {
+        folders.push(child.id);
+      }
+      findFolders(child);
+    }
+  }
+
+  if (tree && tree.length > 0) {
+    findFolders(tree[0]);
+  }
+  return folders;
+}
 
 /**
  * @typedef {{ title: string, sort?: number, collections?: number[] }} RaindropGroup
