@@ -34,6 +34,57 @@ import { loadState, saveState } from './modules/state.js';
     document.getElementById('parent-folder-status')
   );
 
+  // --- new: helper to populate parent folder select ---
+  /**
+   * Populate the parent folder <select> with current bookmark folders.
+   * Attempts to preserve the current selection if it still exists.
+   * @param {string=} preferredId – Folder id that should be selected if present.
+   */
+  async function populateParentFolders(preferredId) {
+    try {
+      const folders = await getAllBookmarkFolders();
+      const bookmarksBarId = await getBookmarksBarFolderId();
+
+      // Clear existing options
+      parentFolderEl.innerHTML = '';
+      folders.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.folder.id;
+        option.textContent = item.path;
+        parentFolderEl.appendChild(option);
+      });
+
+      // Determine which option should be selected
+      const valueToSelect =
+        preferredId &&
+        Array.from(parentFolderEl.options).some((o) => o.value === preferredId)
+          ? preferredId
+          : bookmarksBarId;
+      parentFolderEl.value = valueToSelect;
+    } catch (err) {
+      console.error('Failed to populate parent folders', err);
+    }
+  }
+
+  // Debounced refresh when bookmark tree changes
+  let refreshTimeoutId;
+  function scheduleParentFolderRefresh() {
+    clearTimeout(refreshTimeoutId);
+    refreshTimeoutId = setTimeout(() => {
+      populateParentFolders(parentFolderEl.value);
+    }, 200);
+  }
+  // Register listeners only once (they are no-ops if added multiple times)
+  chrome.bookmarks.onCreated.addListener(scheduleParentFolderRefresh);
+  chrome.bookmarks.onRemoved.addListener(scheduleParentFolderRefresh);
+  chrome.bookmarks.onMoved.addListener(scheduleParentFolderRefresh);
+  chrome.bookmarks.onChanged.addListener(scheduleParentFolderRefresh);
+  if (chrome.bookmarks.onChildrenReordered)
+    chrome.bookmarks.onChildrenReordered.addListener(
+      scheduleParentFolderRefresh,
+    );
+  // --- end new helper ---
+
   if (
     !(formEl instanceof HTMLFormElement) ||
     !(tokenEl instanceof HTMLInputElement) ||
@@ -63,17 +114,8 @@ import { loadState, saveState } from './modules/state.js';
           : true; // default ON
       if (notifyEl) notifyEl.checked = !!enabled;
 
-      const folders = await getAllBookmarkFolders();
-      const bookmarksBarId = await getBookmarksBarFolderId();
-      parentFolderEl.innerHTML = '';
-      folders.forEach((item) => {
-        const option = document.createElement('option');
-        option.value = item.folder.id;
-        option.textContent = item.path;
-        parentFolderEl.appendChild(option);
-      });
-
-      parentFolderEl.value = data.parentFolderId || bookmarksBarId;
+      // Populate the select with current folders (and keep previous selection if possible)
+      await populateParentFolders(data.parentFolderId);
 
       parentFolderEl.addEventListener('change', async () => {
         const newParentId = parentFolderEl.value;
