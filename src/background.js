@@ -84,6 +84,33 @@ import {
 const ALARM_NAME = 'raindrop-sync';
 const SYNC_PERIOD_MINUTES = 10;
 
+async function deleteLocalData() {
+  try {
+    const { rootFolderId } = await loadState();
+    if (rootFolderId) {
+      try {
+        await chromeP.bookmarksRemoveTree(rootFolderId);
+      } catch (error) {
+        // Ignore error if folder is already gone
+        if (!String(error).includes('not found')) {
+          console.error('Failed to remove root folder:', error);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Failed to get root folder for deletion:', error);
+  }
+
+  // Clear all sync-related data
+  await saveState({
+    lastSync: null,
+    collectionMap: {},
+    groupMap: {},
+    itemMap: {},
+    rootFolderId: null,
+  });
+}
+
 async function performSync() {
   if (isSyncing) return;
   setIsSyncing(true);
@@ -717,6 +744,12 @@ chrome.windows?.onRemoved.addListener((windowId) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
+      if (message && message.type === 'resetAndSync') {
+        await deleteLocalData();
+        await performSync();
+        sendResponse({ ok: true });
+        return;
+      }
       if (message && message.type === 'performSync') {
         await performSync();
         sendResponse({ ok: true });
