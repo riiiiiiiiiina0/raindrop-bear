@@ -251,12 +251,31 @@
               window.close();
             });
 
+            const openInNewBtn = document.createElement('button');
+            openInNewBtn.type = 'button';
+            openInNewBtn.title = 'Open in new window';
+            openInNewBtn.textContent = '↗️';
+            openInNewBtn.className =
+              'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+            openInNewBtn.addEventListener('click', async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              disableAllButtons();
+              setStatus('Recovering project in new window…');
+              await sendCommand('recoverSavedProjectInNewWindow', {
+                id: it.id,
+              });
+              window.close();
+            });
+
             function disableAllButtons() {
               deleteBtn.disabled = true;
               replaceBtn.disabled = true;
+              openInNewBtn.disabled = true;
               li.classList.add('opacity-60');
             }
 
+            right.appendChild(openInNewBtn);
             right.appendChild(replaceBtn);
             right.appendChild(deleteBtn);
 
