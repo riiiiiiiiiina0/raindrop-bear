@@ -51,38 +51,44 @@ export async function listSavedProjects() {
   return result;
 }
 
-export async function recoverSavedProject(chrome, collectionId) {
+export async function recoverSavedProject(chrome, collectionId, options) {
   const colId = Number(collectionId);
   if (!Number.isFinite(colId)) return;
+  const { forceNewWindow } = options || {};
+
   // If already syncing with a window, focus that window
-  try {
-    let existingWinId = null;
-    for (const sess of windowSyncSessions.values()) {
-      if (sess && !sess.stopped && Number(sess.collectionId) === colId) {
-        existingWinId = sess.windowId;
-        break;
+  if (!forceNewWindow) {
+    try {
+      let existingWinId = null;
+      for (const sess of windowSyncSessions.values()) {
+        if (sess && !sess.stopped && Number(sess.collectionId) === colId) {
+          existingWinId = sess.windowId;
+          break;
+        }
       }
-    }
-    if (Number.isFinite(Number(existingWinId))) {
-      let existingWindow = null;
-      try {
-        existingWindow = await new Promise((resolve) =>
-          chrome.windows.get(Number(existingWinId), (w) => resolve(w)),
-        );
-      } catch (_) {}
-      if (existingWindow) {
+      if (Number.isFinite(Number(existingWinId))) {
+        let existingWindow = null;
         try {
-          await chrome.windows.update(Number(existingWinId), { focused: true });
+          existingWindow = await new Promise((resolve) =>
+            chrome.windows.get(Number(existingWinId), (w) => resolve(w)),
+          );
         } catch (_) {}
-        return { focusedExisting: true, windowId: Number(existingWinId) };
-      } else {
-        try {
-          windowSyncSessions.delete(Number(existingWinId));
-          await persistActiveSyncSessions(chromeP);
-        } catch (_) {}
+        if (existingWindow) {
+          try {
+            await chrome.windows.update(Number(existingWinId), {
+              focused: true,
+            });
+          } catch (_) {}
+          return { focusedExisting: true, windowId: Number(existingWinId) };
+        } else {
+          try {
+            windowSyncSessions.delete(Number(existingWinId));
+            await persistActiveSyncSessions(chromeP);
+          } catch (_) {}
+        }
       }
-    }
-  } catch (_) {}
+    } catch (_) {}
+  }
   const html = await apiGETText(`/raindrops/${colId}/export.html`);
   try {
     const items = [];
@@ -132,41 +138,8 @@ export async function recoverSavedProject(chrome, collectionId) {
     };
     let targetWindowId = null;
     let activeTab = null;
-    try {
-      const currentWindow = await new Promise((resolve) =>
-        chrome.windows.get(chrome.windows.WINDOW_ID_CURRENT, (w) => resolve(w)),
-      );
-      const tabsInCurrent = await new Promise((resolve) =>
-        chrome.tabs.query(
-          { windowId: chrome.windows.WINDOW_ID_CURRENT },
-          (ts) => resolve(ts || []),
-        ),
-      );
-      const soleTab =
-        Array.isArray(tabsInCurrent) && tabsInCurrent.length === 1
-          ? tabsInCurrent[0]
-          : null;
-      const canReuseCurrentWindow =
-        !!currentWindow &&
-        !!soleTab &&
-        !soleTab.pinned &&
-        isEmptyNewTabUrl(soleTab.url);
-      if (canReuseCurrentWindow) {
-        targetWindowId = currentWindow.id;
-        try {
-          await chrome.windows.update(targetWindowId, { focused: true });
-        } catch (_) {}
-        try {
-          await chrome.tabs.update(soleTab.id, {
-            url: first.url,
-            pinned: first.meta?.pinned ?? false,
-            active: true,
-          });
-        } catch (_) {}
-        activeTab = soleTab;
-      }
-    } catch (_) {}
-    if (!targetWindowId) {
+    let tabsToCreate = sorted.slice(1);
+    if (forceNewWindow) {
       const newWindow = await chrome.windows.create({
         focused: true,
         url: first.url,
@@ -183,6 +156,29 @@ export async function recoverSavedProject(chrome, collectionId) {
         } catch (_) {}
       }
       targetWindowId = newWindow.id;
+    } else {
+      const currentWindow = await new Promise((resolve) => {
+        chrome.windows.get(
+          chrome.windows.WINDOW_ID_CURRENT,
+          { populate: true },
+          (w) => resolve(w),
+        );
+      });
+      targetWindowId = currentWindow.id;
+      const soleTab =
+        currentWindow.tabs.length === 1 ? currentWindow.tabs[0] : null;
+      if (soleTab && !soleTab.pinned && isEmptyNewTabUrl(soleTab.url)) {
+        // If the window is a single new tab, replace it
+        await chrome.tabs.update(soleTab.id, {
+          url: first.url,
+          pinned: first.meta?.pinned ?? false,
+          active: true,
+        });
+        activeTab = soleTab;
+      } else {
+        // Otherwise, add all tabs to the current window
+        tabsToCreate = sorted;
+      }
     }
     const tabGroups = [];
     if (activeTab && activeTab.id && first.meta?.tabGroup) {
@@ -194,7 +190,7 @@ export async function recoverSavedProject(chrome, collectionId) {
         tabIds: [activeTab.id],
       });
     }
-    for (const it of sorted.slice(1)) {
+    for (const it of tabsToCreate) {
       const newTab = await chrome.tabs.create({
         url: it.url,
         windowId: targetWindowId,
