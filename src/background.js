@@ -79,6 +79,8 @@ import {
   deleteSavedProject,
   saveCurrentOrHighlightedTabsToRaindrop,
   saveHighlightedTabsAsProject,
+  saveWindowAsProject,
+  replaceSavedProjectWithTabs,
 } from './modules/projects.js';
 
 const ALARM_NAME = 'raindrop-sync';
@@ -786,6 +788,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: true });
         return;
       }
+      if (message && message.type === 'saveWindowAsProject') {
+        const projectName = (message && message.name) || '';
+        await saveWindowAsProject(chrome, projectName);
+        sendResponse({ ok: true });
+        return;
+      }
+      if (message && message.type === 'replaceSavedProject') {
+        const { id, useHighlighted } = message;
+        const tabs = await new Promise((resolve) =>
+          chrome.tabs.query(
+            useHighlighted
+              ? {
+                  windowId: chrome.windows.WINDOW_ID_CURRENT,
+                  highlighted: true,
+                }
+              : { windowId: chrome.windows.WINDOW_ID_CURRENT },
+            (ts) => resolve(ts || []),
+          ),
+        );
+        await replaceSavedProjectWithTabs(chrome, id, tabs);
+        sendResponse({ ok: true });
+        return;
+      }
     } catch (_) {
       sendResponse({ ok: false });
     }
@@ -835,6 +860,20 @@ chrome.notifications?.onClicked.addListener((notificationId) => {
         chrome.notifications.clear(notificationId);
       } catch (_) {}
     })();
+  } else if (String(notificationId).startsWith('project-saved-')) {
+    const collectionId = String(notificationId).substring(
+      'project-saved-'.length,
+    );
+    if (collectionId) {
+      try {
+        chrome.tabs?.create({
+          url: `https://app.raindrop.io/my/${collectionId}`,
+        });
+      } catch (_) {}
+    }
+    try {
+      chrome.notifications.clear(notificationId);
+    } catch (_) {}
   }
 });
 

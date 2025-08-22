@@ -416,6 +416,17 @@ export async function saveHighlightedTabsAsProject(chrome, name) {
   await saveTabsListAsProject(chrome, projectName, tabsList || []);
 }
 
+export async function saveWindowAsProject(chrome, name) {
+  const projectName = String(name || '').trim();
+  if (!projectName) return;
+  const tabsList = await new Promise((resolve) =>
+    chrome.tabs.query({ windowId: chrome.windows.WINDOW_ID_CURRENT }, (ts) =>
+      resolve(ts || []),
+    ),
+  );
+  await saveTabsListAsProject(chrome, projectName, tabsList || []);
+}
+
 export async function saveTabsListAsProject(chrome, name, tabsList) {
   setBadge('💾', '#a855f7');
   try {
@@ -523,10 +534,19 @@ export async function saveTabsListAsProject(chrome, name, tabsList) {
     setBadge('✔️', '#22c55e');
     scheduleClearBadge(3000);
     try {
-      notify(
-        `Saved ${items.length} tab${
-          items.length > 1 ? 's' : ''
-        } to ${savedProjectsTitle}/${name}`,
+      const iconUrl = chrome.runtime.getURL('icons/icon-128x128.png');
+      chrome.notifications?.create(
+        `project-saved-${projectCollectionId}`,
+        {
+          type: 'basic',
+          iconUrl,
+          title: 'Raindrop Bear',
+          message: `Saved ${items.length} tab${
+            items.length > 1 ? 's' : ''
+          } to ${savedProjectsTitle}/${name}`,
+          priority: 0,
+        },
+        () => {},
       );
     } catch (_) {}
   } catch (e) {
@@ -649,5 +669,23 @@ export async function replaceSavedProjectWithTabs(
   try {
     await apiDELETE(`/collection/${encodeURIComponent(oldId)}`);
   } catch (_) {}
+
+  try {
+    const iconUrl = chrome.runtime.getURL('icons/icon-128x128.png');
+    chrome.notifications?.create(
+      `project-saved-${newId}`,
+      {
+        type: 'basic',
+        iconUrl,
+        title: 'Raindrop Bear',
+        message: `Replaced project "${title}" with ${items.length} tab${
+          items.length > 1 ? 's' : ''
+        }.`,
+        priority: 0,
+      },
+      () => {},
+    );
+  } catch (_) {}
+
   return { title, count: items.length };
 }
