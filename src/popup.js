@@ -107,7 +107,7 @@
     window.close();
   });
 
-  async function getHighlightedTabCount() {
+  async function getHighlightedTabs() {
     try {
       const tabs = await new Promise((resolve) =>
         chrome.tabs.query(
@@ -115,18 +115,21 @@
           (ts) => resolve(ts || []),
         ),
       );
-      return Array.isArray(tabs) ? tabs.length : 0;
+      return Array.isArray(tabs) ? tabs : [];
     } catch (_) {
-      return 0;
+      return [];
     }
   }
 
   (async () => {
-    const count = await getHighlightedTabCount();
+    const highlightedTabs = await getHighlightedTabs();
+    const count = highlightedTabs.length;
     saveBtn.textContent =
       count === 1 ? '📥 Save to unsorted' : `📥 Save ${count} tabs to unsorted`;
     saveProjectBtn.textContent =
-      count === 1 ? '🔼 Save as project' : `🔼 Save ${count} tabs as project`;
+      count > 1
+        ? `🔼 Save ${count} tabs as project`
+        : '🔼 Save current window as project';
 
     // Load saved projects list
     try {
@@ -207,11 +210,54 @@
               window.close();
             });
 
+            const replaceBtn = document.createElement('button');
+            replaceBtn.type = 'button';
+            replaceBtn.title = 'Replace with current tabs';
+            replaceBtn.textContent = '⏫';
+            replaceBtn.className =
+              'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+            replaceBtn.addEventListener('click', async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+
+              const highlightedTabs = await getHighlightedTabs();
+              const count = highlightedTabs.length;
+              const replaceWithHighlighted = count > 1;
+
+              const ok = confirm(
+                `Replace project "${String(
+                  it.title || 'Untitled',
+                )}" with ${
+                  replaceWithHighlighted
+                    ? `${count} highlighted tabs`
+                    : 'tabs in current window'
+                }?`,
+              );
+              if (!ok) return;
+
+              disableAllButtons();
+              setStatus('Replacing…');
+              if (replaceWithHighlighted) {
+                await sendCommand('replaceSavedProject', {
+                  id: it.id,
+                  useHighlighted: true,
+                });
+              } else {
+                await sendCommand('replaceSavedProject', {
+                  id: it.id,
+                  useHighlighted: false,
+                });
+              }
+              window.close();
+            });
+
             function disableAllButtons() {
               deleteBtn.disabled = true;
+              replaceBtn.disabled = true;
               li.classList.add('opacity-60');
             }
 
+            right.appendChild(replaceBtn);
             right.appendChild(deleteBtn);
 
             li.appendChild(left);
@@ -242,14 +288,24 @@
   saveProjectBtn.addEventListener('click', async () => {
     saveProjectBtn.disabled = true;
     setStatus('Saving');
+
+    const highlightedTabs = await getHighlightedTabs();
+    const saveHighlighted = highlightedTabs.length > 1;
+
     const suggested = await computeSuggestedProjectName({
-      highlightedOnly: true,
+      highlightedOnly: saveHighlighted,
     });
     const name = prompt('Project name?', suggested || undefined);
     if (name && name.trim()) {
-      await sendCommand('saveHighlightedTabsAsProject', {
-        name: name.trim(),
-      });
+      if (saveHighlighted) {
+        await sendCommand('saveHighlightedTabsAsProject', {
+          name: name.trim(),
+        });
+      } else {
+        await sendCommand('saveWindowAsProject', {
+          name: name.trim(),
+        });
+      }
     }
     setStatus('');
     saveProjectBtn.disabled = false;

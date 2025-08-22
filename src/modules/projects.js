@@ -416,6 +416,17 @@ export async function saveHighlightedTabsAsProject(chrome, name) {
   await saveTabsListAsProject(chrome, projectName, tabsList || []);
 }
 
+export async function saveWindowAsProject(chrome, name) {
+  const projectName = String(name || '').trim();
+  if (!projectName) return;
+  const tabsList = await new Promise((resolve) =>
+    chrome.tabs.query({ windowId: chrome.windows.WINDOW_ID_CURRENT }, (ts) =>
+      resolve(ts || []),
+    ),
+  );
+  await saveTabsListAsProject(chrome, projectName, tabsList || []);
+}
+
 export async function saveTabsListAsProject(chrome, name, tabsList) {
   setBadge('💾', '#a855f7');
   try {
