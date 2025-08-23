@@ -155,7 +155,7 @@
           for (const it of items) {
             const li = document.createElement('li');
             li.className =
-              'pl-4 pr-1 py-1 text-sm hover:bg-gray-200 dark:hover:bg-gray-800 flex items-center justify-between gap-2 cursor-pointer';
+              'pl-4 pr-1 py-1 text-sm hover:bg-gray-200 dark:hover:bg-gray-800 flex items-center justify-between gap-2 cursor-pointer group';
 
             const left = document.createElement('div');
             left.className = 'flex min-w-0 items-center gap-2';
@@ -291,22 +291,15 @@
               li.classList.add('opacity-60');
             }
 
+            right.className =
+              'flex items-center gap-1 hidden group-hover:flex';
             right.appendChild(addBtn);
             right.appendChild(openInNewBtn);
             right.appendChild(replaceBtn);
             right.appendChild(deleteBtn);
-            right.classList.add('hidden');
 
             li.appendChild(left);
             li.appendChild(right);
-            li.addEventListener('mouseenter', () => {
-              right.classList.remove('hidden');
-              li.classList.add('bg-gray-200', 'dark:bg-gray-800');
-            });
-            li.addEventListener('mouseleave', () => {
-              right.classList.add('hidden');
-              li.classList.remove('bg-gray-200', 'dark:bg-gray-800');
-            });
             li.addEventListener('click', async (e) => {
               e.preventDefault();
               e.stopPropagation();
