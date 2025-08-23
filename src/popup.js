@@ -155,7 +155,7 @@
           for (const it of items) {
             const li = document.createElement('li');
             li.className =
-              'pl-4 pr-1 py-1 text-sm hover:bg-gray-200 dark:hover:bg-gray-800 flex items-center justify-between gap-2 cursor-pointer';
+              'pl-4 pr-1 py-1 text-sm hover:bg-gray-200 dark:hover:bg-gray-800 flex items-center justify-between gap-2 cursor-pointer group';
 
             const left = document.createElement('div');
             left.className = 'flex min-w-0 items-center gap-2';
@@ -190,6 +190,21 @@
 
             const right = document.createElement('div');
             right.className = 'flex items-center gap-1';
+
+            const addBtn = document.createElement('button');
+            addBtn.type = 'button';
+            addBtn.title = 'Add current tab(s) to this project';
+            addBtn.textContent = '🆕';
+            addBtn.className =
+              'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+            addBtn.addEventListener('click', async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              disableAllButtons();
+              setStatus('Adding tabs…');
+              await sendCommand('addTabsToProject', { id: it.id });
+              window.close();
+            });
 
             const deleteBtn = document.createElement('button');
             deleteBtn.type = 'button';
@@ -269,12 +284,16 @@
             });
 
             function disableAllButtons() {
+              addBtn.disabled = true;
               deleteBtn.disabled = true;
               replaceBtn.disabled = true;
               openInNewBtn.disabled = true;
               li.classList.add('opacity-60');
             }
 
+            right.className =
+              'flex items-center gap-1 hidden group-hover:flex';
+            right.appendChild(addBtn);
             right.appendChild(openInNewBtn);
             right.appendChild(replaceBtn);
             right.appendChild(deleteBtn);

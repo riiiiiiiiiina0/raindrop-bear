@@ -685,3 +685,88 @@ export async function replaceSavedProjectWithTabs(
 
   return { title, count: items.length };
 }
+
+export async function addTabsToProject(chrome, collectionId, tabsList) {
+  const colId = Number(collectionId);
+  if (!Number.isFinite(colId)) return { title: 'Project', count: 0 };
+
+  const eligibleTabs = (tabsList || []).filter(
+    (t) =>
+      t.url && (t.url.startsWith('https://') || t.url.startsWith('http://')),
+  );
+  if (eligibleTabs.length === 0) throw new Error('No eligible http(s) tabs');
+
+  const groupsInWindow = await new Promise((resolve) =>
+    chrome.tabGroups?.query(
+      { windowId: chrome.windows.WINDOW_ID_CURRENT },
+      (gs) => resolve(gs || []),
+    ),
+  );
+  const groupIdToMeta = new Map();
+  (groupsInWindow || []).forEach((g) => groupIdToMeta.set(g.id, g));
+
+  // get existing items
+  const existingItemsRes = await apiGET(
+    `/raindrops/${encodeURIComponent(colId)}`,
+  );
+  const existingItems =
+    existingItemsRes && Array.isArray(existingItemsRes.items)
+      ? existingItemsRes.items
+      : [];
+  const existingItemsCount = existingItems.length;
+
+  const items = eligibleTabs.map((t, i) => {
+    const baseTitle = t.title || t.url || '';
+    const group = groupIdToMeta.get(t.groupId) || null;
+    const meta = {
+      index: existingItemsCount + i,
+      pinned: t.pinned,
+      tabGroup: group && group.title,
+      tabGroupColor: group && group.color,
+    };
+    return { link: t.url, title: baseTitle, note: JSON.stringify(meta) };
+  });
+
+  try {
+    await apiPOST('/raindrops', {
+      items: items.map((it) => ({
+        link: it.link,
+        title: it.title,
+        note: it.note,
+        collection: { $id: Number(colId) },
+      })),
+    });
+  } catch (_) {
+    for (const it of items) {
+      try {
+        await apiPOST('/raindrop', {
+          link: it.link,
+          title: it.title,
+          note: it.note,
+          collection: { $id: Number(colId) },
+        });
+      } catch (_) {}
+    }
+  }
+
+  try {
+    const collection = await apiGET(`/collection/${encodeURIComponent(colId)}`);
+    const title = collection?.item?.title || 'Project';
+    const iconUrl = chrome.runtime.getURL('icons/icon-128x128.png');
+    chrome.notifications?.create(
+      `project-saved-${colId}`,
+      {
+        type: 'basic',
+        iconUrl,
+        title: 'Raindrop Bear',
+        message: `Added ${items.length} tab${
+          items.length > 1 ? 's' : ''
+        } to project "${title}".`,
+        priority: 0,
+      },
+      () => {},
+    );
+  } catch (_) {}
+
+  return { title: 'Project', count: items.length };
+}
