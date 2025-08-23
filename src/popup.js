@@ -14,11 +14,15 @@
   const projectsListEl = /** @type {HTMLUListElement|null} */ (
     document.getElementById('projects-list')
   );
+  const settingsBtn = /** @type {HTMLButtonElement|null} */ (
+    document.getElementById('settings-btn')
+  );
 
   if (
     !(syncBtn instanceof HTMLButtonElement) ||
     !(saveBtn instanceof HTMLButtonElement) ||
-    !(saveProjectBtn instanceof HTMLButtonElement)
+    !(saveProjectBtn instanceof HTMLButtonElement) ||
+    !(settingsBtn instanceof HTMLButtonElement)
   )
     return;
 
@@ -345,5 +349,9 @@
     setStatus('');
     saveProjectBtn.disabled = false;
     window.close();
+  });
+
+  settingsBtn.addEventListener('click', () => {
+    chrome.runtime.openOptionsPage();
   });
 })();
