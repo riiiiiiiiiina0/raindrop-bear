@@ -191,6 +191,21 @@
             const right = document.createElement('div');
             right.className = 'flex items-center gap-1';
 
+            const addBtn = document.createElement('button');
+            addBtn.type = 'button';
+            addBtn.title = 'Add current tab(s) to this project';
+            addBtn.textContent = '🆕';
+            addBtn.className =
+              'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+            addBtn.addEventListener('click', async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              disableAllButtons();
+              setStatus('Adding tabs…');
+              await sendCommand('addTabsToProject', { id: it.id });
+              window.close();
+            });
+
             const deleteBtn = document.createElement('button');
             deleteBtn.type = 'button';
             deleteBtn.title = 'Delete';
@@ -269,18 +284,29 @@
             });
 
             function disableAllButtons() {
+              addBtn.disabled = true;
               deleteBtn.disabled = true;
               replaceBtn.disabled = true;
               openInNewBtn.disabled = true;
               li.classList.add('opacity-60');
             }
 
+            right.appendChild(addBtn);
             right.appendChild(openInNewBtn);
             right.appendChild(replaceBtn);
             right.appendChild(deleteBtn);
+            right.classList.add('hidden');
 
             li.appendChild(left);
             li.appendChild(right);
+            li.addEventListener('mouseenter', () => {
+              right.classList.remove('hidden');
+              li.classList.add('bg-gray-200', 'dark:bg-gray-800');
+            });
+            li.addEventListener('mouseleave', () => {
+              right.classList.add('hidden');
+              li.classList.remove('bg-gray-200', 'dark:bg-gray-800');
+            });
             li.addEventListener('click', async (e) => {
               e.preventDefault();
               e.stopPropagation();

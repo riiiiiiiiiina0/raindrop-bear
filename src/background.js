@@ -81,6 +81,7 @@ import {
   saveHighlightedTabsAsProject,
   saveWindowAsProject,
   replaceSavedProjectWithTabs,
+  addTabsToProject,
 } from './modules/projects.js';
 
 const ALARM_NAME = 'raindrop-sync';
@@ -818,6 +819,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           ),
         );
         await replaceSavedProjectWithTabs(chrome, id, tabs);
+        sendResponse({ ok: true });
+        return;
+      }
+      if (message && message.type === 'addTabsToProject') {
+        const { id } = message;
+        const tabs = await new Promise((resolve) =>
+          chrome.tabs.query(
+            {
+              windowId: chrome.windows.WINDOW_ID_CURRENT,
+              highlighted: true,
+            },
+            (ts) => resolve(ts || []),
+          ),
+        );
+        const activeTabs =
+          tabs.length > 0
+            ? tabs
+            : await new Promise((resolve) =>
+                chrome.tabs.query({ active: true, currentWindow: true }, (ts) =>
+                  resolve(ts || []),
+                ),
+              );
+        await addTabsToProject(chrome, id, activeTabs);
         sendResponse({ ok: true });
         return;
       }
