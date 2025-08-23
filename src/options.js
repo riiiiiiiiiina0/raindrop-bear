@@ -344,6 +344,30 @@ import { loadState, saveState } from './modules/state.js';
             position: 'right',
             style: { background: '#22c55e' },
           }).showToast();
+
+          // After removing duplicates, also perform a reset and re-sync
+          // to make sure local bookmarks are in sync with raindrop after dedup
+          // @ts-ignore
+          Toastify({
+            text: '🗑️ Deleting local data and starting a full sync...',
+            duration: 5000,
+            position: 'right',
+            style: { background: '#f59e0b' },
+          }).showToast();
+
+          try {
+            await chrome.runtime.sendMessage({ type: 'resetAndSync' });
+          } catch (error) {
+            console.error('Failed to send resetAndSync message:', error);
+            // @ts-ignore
+            Toastify({
+              text: 'Failed to start reset and sync.',
+              duration: 3000,
+              position: 'right',
+              style: { background: '#ef4444' },
+            }).showToast();
+          }
+
           duplicatesContainerEl.innerHTML = '';
         });
       }
