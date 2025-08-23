@@ -155,7 +155,7 @@
           for (const it of items) {
             const li = document.createElement('li');
             li.className =
-              'pl-4 pr-1 py-1 text-sm hover:bg-gray-200 dark:hover:bg-gray-800 flex items-center justify-between gap-2 cursor-pointer group';
+              'pl-4 pr-1 py-1 h-8 text-sm hover:bg-gray-200 dark:hover:bg-gray-800 flex items-center justify-between gap-2 cursor-pointer group';
 
             const left = document.createElement('div');
             left.className = 'flex min-w-0 items-center gap-2';
@@ -194,7 +194,7 @@
             const addBtn = document.createElement('button');
             addBtn.type = 'button';
             addBtn.title = 'Add current tab(s) to this project';
-            addBtn.textContent = '🆕';
+            addBtn.textContent = '➕';
             addBtn.className =
               'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
             addBtn.addEventListener('click', async (e) => {
@@ -240,9 +240,7 @@
               const replaceWithHighlighted = count > 1;
 
               const ok = confirm(
-                `Replace project "${String(
-                  it.title || 'Untitled',
-                )}" with ${
+                `Replace project "${String(it.title || 'Untitled')}" with ${
                   replaceWithHighlighted
                     ? `${count} highlighted tabs`
                     : 'tabs in current window'
@@ -291,11 +289,10 @@
               li.classList.add('opacity-60');
             }
 
-            right.className =
-              'flex items-center gap-1 hidden group-hover:flex';
+            right.className = 'flex items-center gap-1 hidden group-hover:flex';
             right.appendChild(addBtn);
-            right.appendChild(openInNewBtn);
             right.appendChild(replaceBtn);
+            right.appendChild(openInNewBtn);
             right.appendChild(deleteBtn);
 
             li.appendChild(left);
@@ -349,5 +346,4 @@
     saveProjectBtn.disabled = false;
     window.close();
   });
-
 })();
