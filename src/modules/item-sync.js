@@ -131,6 +131,8 @@ export async function syncNewAndUpdatedItems(
               const newNode = await chromeP.bookmarksCreate(createDetails);
               itemMap[raindropId] = newNode.id;
               didChange = true;
+            } else {
+              itemMap[raindropId] = existing.id;
             }
           }
         } catch (e) {
