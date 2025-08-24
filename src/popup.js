@@ -285,11 +285,25 @@
               window.close();
             });
 
+            const openInRaindropBtn = document.createElement('button');
+            openInRaindropBtn.type = 'button';
+            openInRaindropBtn.title = 'Open collection in Raindrop.io';
+            openInRaindropBtn.textContent = '🌐';
+            openInRaindropBtn.className =
+              'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+            openInRaindropBtn.addEventListener('click', async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const url = `https://app.raindrop.io/collection/${it.id}`;
+              chrome.tabs.create({ url });
+            });
+
             function disableAllButtons() {
               addBtn.disabled = true;
               deleteBtn.disabled = true;
               replaceBtn.disabled = true;
               openInNewBtn.disabled = true;
+              openInRaindropBtn.disabled = true;
               li.classList.add('opacity-60');
             }
 
@@ -297,6 +311,7 @@
             right.appendChild(addBtn);
             right.appendChild(replaceBtn);
             right.appendChild(openInNewBtn);
+            right.appendChild(openInRaindropBtn);
             right.appendChild(deleteBtn);
 
             li.appendChild(left);
