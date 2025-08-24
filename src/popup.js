@@ -17,6 +17,9 @@
   const settingsBtn = /** @type {HTMLButtonElement|null} */ (
     document.getElementById('settings-btn')
   );
+  const projectsRefreshingStatusEl = /** @type {HTMLSpanElement|null} */ (
+    document.getElementById('projects-refreshing-status')
+  );
 
   if (
     !(syncBtn instanceof HTMLButtonElement) ||
@@ -26,6 +29,10 @@
   )
     return;
 
+  /**
+   * @param {string} text
+   * @param {'info'|'error'} [tone]
+   */
   function setStatus(text, tone) {
     if (!statusEl) return;
     const hasText = !!(text && String(text).trim());
@@ -135,199 +142,232 @@
         ? `🔼 Save ${count} tabs as project`
         : '🔼 Save current window as project';
 
+    /** @param {any[]} items */
+    function renderProjects(items) {
+      if (!(projectsListEl instanceof HTMLUListElement)) return;
+      projectsListEl.innerHTML = '';
+      if (items.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'px-4 py-2 text-xs text-gray-500 dark:text-gray-400';
+        li.textContent = 'No saved projects';
+        projectsListEl.appendChild(li);
+      } else {
+        for (const it of items) {
+          const li = document.createElement('li');
+          li.className =
+            'pl-4 pr-1 py-1 h-8 text-sm hover:bg-gray-200 dark:hover:bg-gray-800 flex items-center justify-between gap-2 cursor-pointer group';
+
+          const left = document.createElement('div');
+          left.className = 'flex min-w-0 items-center gap-2';
+
+          // Avatar (cover image)
+          const avatar = document.createElement('img');
+          avatar.className = 'h-4 w-4 rounded object-cover flex-none';
+          const cover = (it && it.cover) || '';
+          if (cover) {
+            avatar.src = String(cover);
+            avatar.alt = '';
+          } else {
+            // tiny transparent placeholder to keep layout consistent
+            avatar.src =
+              'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+            avatar.alt = '';
+          }
+
+          const title = document.createElement('span');
+          title.className = 'truncate';
+          title.textContent = String(it.title || 'Untitled');
+          // const meta = document.createElement('span');
+          // meta.className = 'shrink-0 text-[10px] text-gray-400';
+          // const parts = [];
+          // if (typeof it.count === 'number') parts.push(`${it.count}`);
+          // if (it.lastUpdate)
+          //   parts.push(new Date(it.lastUpdate).toLocaleDateString());
+          // meta.textContent = parts.join(' · ');
+          left.appendChild(avatar);
+          left.appendChild(title);
+          // left.appendChild(meta);
+
+          const right = document.createElement('div');
+          right.className = 'flex items-center gap-1';
+
+          const addBtn = document.createElement('button');
+          addBtn.type = 'button';
+          addBtn.title = 'Add current tab(s) to this project';
+          addBtn.textContent = '➕';
+          addBtn.className =
+            'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+          addBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            disableAllButtons();
+            setStatus('Adding tabs…');
+            await sendCommand('addTabsToProject', { id: it.id });
+            window.close();
+          });
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.title = 'Delete';
+          deleteBtn.textContent = '❌';
+          deleteBtn.className =
+            'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+          deleteBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const ok = confirm(
+              `Delete saved project "${String(it.title || 'Untitled')}"?`,
+            );
+            if (!ok) return;
+            disableAllButtons();
+            setStatus('Deleting…');
+            await sendCommand('deleteSavedProject', { id: it.id });
+            window.close();
+          });
+
+          const replaceBtn = document.createElement('button');
+          replaceBtn.type = 'button';
+          replaceBtn.title = 'Replace with current tabs';
+          replaceBtn.textContent = '⏫';
+          replaceBtn.className =
+            'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+          replaceBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const highlightedTabs = await getHighlightedTabs();
+            const count = highlightedTabs.length;
+            const replaceWithHighlighted = count > 1;
+
+            const ok = confirm(
+              `Replace project "${String(it.title || 'Untitled')}" with ${
+                replaceWithHighlighted
+                  ? `${count} highlighted tabs`
+                  : 'tabs in current window'
+              }?`,
+            );
+            if (!ok) return;
+
+            disableAllButtons();
+            setStatus('Replacing…');
+            if (replaceWithHighlighted) {
+              await sendCommand('replaceSavedProject', {
+                id: it.id,
+                useHighlighted: true,
+              });
+            } else {
+              await sendCommand('replaceSavedProject', {
+                id: it.id,
+                useHighlighted: false,
+              });
+            }
+            window.close();
+          });
+
+          const openInNewBtn = document.createElement('button');
+          openInNewBtn.type = 'button';
+          openInNewBtn.title = 'Open in new window';
+          openInNewBtn.textContent = '↗️';
+          openInNewBtn.className =
+            'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+          openInNewBtn.addEventListener('click', async (e) => {
+              e.preventDefault();
+            e.stopPropagation();
+            disableAllButtons();
+            setStatus('Recovering project in new window…');
+            await sendCommand('recoverSavedProjectInNewWindow', { id: it.id });
+            window.close();
+          });
+
+          const openInRaindropBtn = document.createElement('button');
+          openInRaindropBtn.type = 'button';
+          openInRaindropBtn.title = 'Open collection in Raindrop.io';
+          openInRaindropBtn.textContent = '🌐';
+          openInRaindropBtn.className =
+            'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+          openInRaindropBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const url = `https://app.raindrop.io/my/${it.id}`;
+            chrome.tabs.create({ url });
+          });
+
+          function disableAllButtons() {
+            addBtn.disabled = true;
+            deleteBtn.disabled = true;
+            replaceBtn.disabled = true;
+            openInNewBtn.disabled = true;
+            openInRaindropBtn.disabled = true;
+            li.classList.add('opacity-60');
+          }
+
+          right.className = 'flex items-center gap-1 hidden group-hover:flex';
+          right.appendChild(addBtn);
+          right.appendChild(replaceBtn);
+          right.appendChild(openInNewBtn);
+          right.appendChild(openInRaindropBtn);
+          right.appendChild(deleteBtn);
+
+          li.appendChild(left);
+          li.appendChild(right);
+          li.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setStatus('Recovering project…');
+            await sendCommand('recoverSavedProject', { id: it.id });
+            window.close();
+          });
+          projectsListEl.appendChild(li);
+        }
+      }
+    }
+
     // Load saved projects list
     try {
       if (projectsListEl instanceof HTMLUListElement) {
-        projectsListEl.innerHTML = '';
-        const loading = document.createElement('li');
-        loading.className =
-          'px-4 py-2 text-xs text-gray-500 dark:text-gray-400';
-        loading.textContent = 'Loading …';
-        projectsListEl.appendChild(loading);
+        const CACHE_KEY = 'cached-projects-list';
+        let hasRenderedFromCache = false;
+
+        // Try to load from cache first
+        try {
+          const cached = await new Promise((resolve) =>
+            chrome.storage.local.get(CACHE_KEY, (r) => resolve(r)),
+          );
+          if (cached && Array.isArray(cached[CACHE_KEY])) {
+            renderProjects(cached[CACHE_KEY]);
+            hasRenderedFromCache = true;
+            if (projectsRefreshingStatusEl)
+              projectsRefreshingStatusEl.classList.remove('hidden');
+          }
+        } catch (_) {}
+
+        if (!hasRenderedFromCache) {
+          projectsListEl.innerHTML = '';
+          const loading = document.createElement('li');
+          loading.className =
+            'px-4 py-2 text-xs text-gray-500 dark:text-gray-400';
+          loading.textContent = 'Loading …';
+          projectsListEl.appendChild(loading);
+        }
 
         const res = await sendCommand('listSavedProjects');
         const items =
           res && res.ok && Array.isArray(res.items) ? res.items : [];
+        renderProjects(items);
+        if (projectsRefreshingStatusEl)
+          projectsRefreshingStatusEl.classList.add('hidden');
 
-        projectsListEl.innerHTML = '';
-        if (items.length === 0) {
-          const li = document.createElement('li');
-          li.className = 'px-4 py-2 text-xs text-gray-500 dark:text-gray-400';
-          li.textContent = 'No saved projects';
-          projectsListEl.appendChild(li);
-        } else {
-          for (const it of items) {
-            const li = document.createElement('li');
-            li.className =
-              'pl-4 pr-1 py-1 h-8 text-sm hover:bg-gray-200 dark:hover:bg-gray-800 flex items-center justify-between gap-2 cursor-pointer group';
-
-            const left = document.createElement('div');
-            left.className = 'flex min-w-0 items-center gap-2';
-
-            // Avatar (cover image)
-            const avatar = document.createElement('img');
-            avatar.className = 'h-4 w-4 rounded object-cover flex-none';
-            const cover = (it && it.cover) || '';
-            if (cover) {
-              avatar.src = String(cover);
-              avatar.alt = '';
-            } else {
-              // tiny transparent placeholder to keep layout consistent
-              avatar.src =
-                'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
-              avatar.alt = '';
-            }
-
-            const title = document.createElement('span');
-            title.className = 'truncate';
-            title.textContent = String(it.title || 'Untitled');
-            // const meta = document.createElement('span');
-            // meta.className = 'shrink-0 text-[10px] text-gray-400';
-            // const parts = [];
-            // if (typeof it.count === 'number') parts.push(`${it.count}`);
-            // if (it.lastUpdate)
-            //   parts.push(new Date(it.lastUpdate).toLocaleDateString());
-            // meta.textContent = parts.join(' · ');
-            left.appendChild(avatar);
-            left.appendChild(title);
-            // left.appendChild(meta);
-
-            const right = document.createElement('div');
-            right.className = 'flex items-center gap-1';
-
-            const addBtn = document.createElement('button');
-            addBtn.type = 'button';
-            addBtn.title = 'Add current tab(s) to this project';
-            addBtn.textContent = '➕';
-            addBtn.className =
-              'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
-            addBtn.addEventListener('click', async (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              disableAllButtons();
-              setStatus('Adding tabs…');
-              await sendCommand('addTabsToProject', { id: it.id });
-              window.close();
-            });
-
-            const deleteBtn = document.createElement('button');
-            deleteBtn.type = 'button';
-            deleteBtn.title = 'Delete';
-            deleteBtn.textContent = '❌';
-            deleteBtn.className =
-              'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
-            deleteBtn.addEventListener('click', async (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              const ok = confirm(
-                `Delete saved project "${String(it.title || 'Untitled')}"?`,
-              );
-              if (!ok) return;
-              disableAllButtons();
-              setStatus('Deleting…');
-              await sendCommand('deleteSavedProject', { id: it.id });
-              window.close();
-            });
-
-            const replaceBtn = document.createElement('button');
-            replaceBtn.type = 'button';
-            replaceBtn.title = 'Replace with current tabs';
-            replaceBtn.textContent = '⏫';
-            replaceBtn.className =
-              'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
-            replaceBtn.addEventListener('click', async (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-
-              const highlightedTabs = await getHighlightedTabs();
-              const count = highlightedTabs.length;
-              const replaceWithHighlighted = count > 1;
-
-              const ok = confirm(
-                `Replace project "${String(it.title || 'Untitled')}" with ${
-                  replaceWithHighlighted
-                    ? `${count} highlighted tabs`
-                    : 'tabs in current window'
-                }?`,
-              );
-              if (!ok) return;
-
-              disableAllButtons();
-              setStatus('Replacing…');
-              if (replaceWithHighlighted) {
-                await sendCommand('replaceSavedProject', {
-                  id: it.id,
-                  useHighlighted: true,
-                });
-              } else {
-                await sendCommand('replaceSavedProject', {
-                  id: it.id,
-                  useHighlighted: false,
-                });
-              }
-              window.close();
-            });
-
-            const openInNewBtn = document.createElement('button');
-            openInNewBtn.type = 'button';
-            openInNewBtn.title = 'Open in new window';
-            openInNewBtn.textContent = '↗️';
-            openInNewBtn.className =
-              'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
-            openInNewBtn.addEventListener('click', async (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              disableAllButtons();
-              setStatus('Recovering project in new window…');
-              await sendCommand('recoverSavedProjectInNewWindow', {
-                id: it.id,
-              });
-              window.close();
-            });
-
-            const openInRaindropBtn = document.createElement('button');
-            openInRaindropBtn.type = 'button';
-            openInRaindropBtn.title = 'Open collection in Raindrop.io';
-            openInRaindropBtn.textContent = '🌐';
-            openInRaindropBtn.className =
-              'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
-            openInRaindropBtn.addEventListener('click', async (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              const url = `https://app.raindrop.io/my/${it.id}`;
-              chrome.tabs.create({ url });
-            });
-
-            function disableAllButtons() {
-              addBtn.disabled = true;
-              deleteBtn.disabled = true;
-              replaceBtn.disabled = true;
-              openInNewBtn.disabled = true;
-              openInRaindropBtn.disabled = true;
-              li.classList.add('opacity-60');
-            }
-
-            right.className = 'flex items-center gap-1 hidden group-hover:flex';
-            right.appendChild(addBtn);
-            right.appendChild(replaceBtn);
-            right.appendChild(openInNewBtn);
-            right.appendChild(openInRaindropBtn);
-            right.appendChild(deleteBtn);
-
-            li.appendChild(left);
-            li.appendChild(right);
-            li.addEventListener('click', async (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setStatus('Recovering project…');
-              await sendCommand('recoverSavedProject', { id: it.id });
-              window.close();
-            });
-            projectsListEl.appendChild(li);
-          }
-        }
+        // Update cache
+        try {
+          await new Promise((resolve) =>
+            chrome.storage.local.set({ [CACHE_KEY]: items }, () => resolve()),
+          );
+        } catch (_) {}
       }
-    } catch (_) {}
+    } catch (_) {
+      if (projectsRefreshingStatusEl)
+        projectsRefreshingStatusEl.classList.add('hidden');
+    }
   })();
 
   saveBtn.addEventListener('click', async () => {
