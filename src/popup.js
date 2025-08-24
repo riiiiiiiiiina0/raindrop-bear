@@ -294,7 +294,7 @@
             openInRaindropBtn.addEventListener('click', async (e) => {
               e.preventDefault();
               e.stopPropagation();
-              const url = `https://app.raindrop.io/collection/${it.id}`;
+              const url = `https://app.raindrop.io/my/${it.id}`;
               chrome.tabs.create({ url });
             });
 
