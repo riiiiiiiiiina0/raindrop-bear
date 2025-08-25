@@ -8,6 +8,9 @@
   const saveProjectBtn = /** @type {HTMLButtonElement|null} */ (
     document.getElementById('save-project-btn')
   );
+  const saveWindowProjectBtn = /** @type {HTMLButtonElement|null} */ (
+    document.getElementById('save-window-project-btn')
+  );
   const statusEl = /** @type {HTMLParagraphElement|null} */ (
     document.getElementById('status')
   );
@@ -25,7 +28,8 @@
     !(syncBtn instanceof HTMLButtonElement) ||
     !(saveBtn instanceof HTMLButtonElement) ||
     !(saveProjectBtn instanceof HTMLButtonElement) ||
-    !(settingsBtn instanceof HTMLButtonElement)
+    !(settingsBtn instanceof HTMLButtonElement) ||
+    !(saveWindowProjectBtn instanceof HTMLButtonElement)
   )
     return;
 
@@ -139,8 +143,8 @@
       count === 1 ? '📥 Save to unsorted' : `📥 Save ${count} tabs to unsorted`;
     saveProjectBtn.textContent =
       count > 1
-        ? `🔼 Save ${count} tabs as project`
-        : '🔼 Save current window as project';
+        ? `🔼 Save ${count} highlighted tabs as project`
+        : '🔼 Save current tab as project';
 
     /** @param {any[]} items */
     function renderProjects(items) {
@@ -383,26 +387,35 @@
     saveProjectBtn.disabled = true;
     setStatus('Saving');
 
-    const highlightedTabs = await getHighlightedTabs();
-    const saveHighlighted = highlightedTabs.length > 1;
-
     const suggested = await computeSuggestedProjectName({
-      highlightedOnly: saveHighlighted,
+      highlightedOnly: true,
     });
     const name = prompt('Project name?', suggested || undefined);
     if (name && name.trim()) {
-      if (saveHighlighted) {
-        await sendCommand('saveHighlightedTabsAsProject', {
-          name: name.trim(),
-        });
-      } else {
-        await sendCommand('saveWindowAsProject', {
-          name: name.trim(),
-        });
-      }
+      await sendCommand('saveHighlightedTabsAsProject', {
+        name: name.trim(),
+      });
     }
     setStatus('');
     saveProjectBtn.disabled = false;
+    window.close();
+  });
+
+  saveWindowProjectBtn.addEventListener('click', async () => {
+    saveWindowProjectBtn.disabled = true;
+    setStatus('Saving');
+
+    const suggested = await computeSuggestedProjectName({
+      highlightedOnly: false, // For the whole window
+    });
+    const name = prompt('Project name?', suggested || undefined);
+    if (name && name.trim()) {
+      await sendCommand('saveWindowAsProject', {
+        name: name.trim(),
+      });
+    }
+    setStatus('');
+    saveWindowProjectBtn.disabled = false;
     window.close();
   });
 
