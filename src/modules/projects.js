@@ -4,6 +4,7 @@ import {
   apiPUT,
   apiDELETE,
   apiGETText,
+  uploadCover,
 } from './api-facade.js';
 import { setBadge, scheduleClearBadge, notify } from './ui.js';
 import { loadState, saveState } from './state.js';
@@ -431,6 +432,26 @@ export async function saveTabsListAsProject(chrome, name, tabsList) {
         t.url && (t.url.startsWith('https://') || t.url.startsWith('http://')),
     );
     if (!eligibleTabs.length) throw new Error('No eligible tabs');
+
+    let screenshotDataUrl = null;
+    if (eligibleTabs.length === 1) {
+      try {
+        const tab = eligibleTabs[0];
+        screenshotDataUrl = await new Promise((resolve) =>
+          chrome.tabs.captureVisibleTab(
+            tab.windowId,
+            {
+              format: 'jpeg',
+              quality: 90,
+            },
+            (dataUrl) => resolve(dataUrl),
+          ),
+        );
+      } catch (e) {
+        console.error('Failed to capture screenshot:', e);
+      }
+    }
+
     const groupsInWindow = await new Promise((resolve) =>
       chrome.tabGroups?.query(
         { windowId: chrome.windows.WINDOW_ID_CURRENT },
@@ -514,16 +535,38 @@ export async function saveTabsListAsProject(chrome, name, tabsList) {
       })),
     };
     try {
-      await apiPOST('/raindrops', body);
+      const res = await apiPOST('/raindrops', body);
+      if (screenshotDataUrl && res && Array.isArray(res.items) && res.items.length > 0) {
+        const raindrop = res.items[0];
+        const raindropId = raindrop && (raindrop._id ?? raindrop.id);
+        if (raindropId) {
+          try {
+            await uploadCover(raindropId, screenshotDataUrl);
+          } catch (e) {
+            console.error('Failed to upload cover:', e);
+          }
+        }
+      }
     } catch (_) {
       for (const it of items) {
         try {
-          await apiPOST('/raindrop', {
+          const res = await apiPOST('/raindrop', {
             link: it.link,
             title: it.title,
             note: it.note,
             collection: { $id: Number(projectCollectionId) },
           });
+          if (screenshotDataUrl && res && res.item) {
+            const raindrop = res.item;
+            const raindropId = raindrop && (raindrop._id ?? raindrop.id);
+            if (raindropId) {
+              try {
+                await uploadCover(raindropId, screenshotDataUrl);
+              } catch (e) {
+                console.error('Failed to upload cover:', e);
+              }
+            }
+          }
         } catch (_) {}
       }
     }
@@ -642,7 +685,7 @@ export async function replaceSavedProjectWithTabs(
     }
   } catch (_) {}
   try {
-    await apiPOST('/raindrops', {
+    const res = await apiPOST('/raindrops', {
       items: items.map((it) => ({
         link: it.link,
         title: it.title,
@@ -696,6 +739,25 @@ export async function addTabsToProject(chrome, collectionId, tabsList) {
   );
   if (eligibleTabs.length === 0) throw new Error('No eligible http(s) tabs');
 
+  let screenshotDataUrl = null;
+  if (eligibleTabs.length === 1) {
+    try {
+      const tab = eligibleTabs[0];
+      screenshotDataUrl = await new Promise((resolve) =>
+        chrome.tabs.captureVisibleTab(
+          tab.windowId,
+          {
+            format: 'jpeg',
+            quality: 90,
+          },
+          (dataUrl) => resolve(dataUrl),
+        ),
+      );
+    } catch (e) {
+      console.error('Failed to capture screenshot:', e);
+    }
+  }
+
   const groupsInWindow = await new Promise((resolve) =>
     chrome.tabGroups?.query(
       { windowId: chrome.windows.WINDOW_ID_CURRENT },
@@ -736,15 +798,37 @@ export async function addTabsToProject(chrome, collectionId, tabsList) {
         collection: { $id: Number(colId) },
       })),
     });
+    if (screenshotDataUrl && res && Array.isArray(res.items) && res.items.length > 0) {
+        const raindrop = res.items[0];
+        const raindropId = raindrop && (raindrop._id ?? raindrop.id);
+        if (raindropId) {
+          try {
+            await uploadCover(raindropId, screenshotDataUrl);
+          } catch (e) {
+            console.error('Failed to upload cover:', e);
+          }
+        }
+      }
   } catch (_) {
     for (const it of items) {
       try {
-        await apiPOST('/raindrop', {
+        const res = await apiPOST('/raindrop', {
           link: it.link,
           title: it.title,
           note: it.note,
           collection: { $id: Number(colId) },
         });
+        if (screenshotDataUrl && res && res.item) {
+            const raindrop = res.item;
+            const raindropId = raindrop && (raindrop._id ?? raindrop.id);
+            if (raindropId) {
+              try {
+                await uploadCover(raindropId, screenshotDataUrl);
+              } catch (e) {
+                console.error('Failed to upload cover:', e);
+              }
+            }
+          }
       } catch (_) {}
     }
   }

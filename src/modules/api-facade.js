@@ -4,8 +4,10 @@ import {
   apiGET as lowGET,
   apiPOST as lowPOST,
   apiPUT as lowPUT,
+  apiPUTFile as lowPUTFile,
   apiDELETE as lowDELETE,
   apiGETText as lowGETText,
+  uploadCover as lowUploadCover,
   setApiToken as setLowToken,
   loadTokenIfNeeded,
 } from './raindrop.js';
@@ -51,6 +53,20 @@ export async function apiGET(pathWithQuery) {
   }
 }
 
+export async function uploadCover(raindropId, dataUrl) {
+  try {
+    await ensureToken();
+    return await lowUploadCover(raindropId, dataUrl);
+  } catch (err) {
+    if (err && (err.status === 401 || err.status === 403)) {
+      notifyMissingOrInvalidToken(
+        'Invalid API token. Please update your Raindrop API token.',
+      );
+    }
+    throw err;
+  }
+}
+
 export async function apiGETText(pathWithQuery) {
   try {
     await ensureToken();
@@ -83,6 +99,20 @@ export async function apiPUT(path, body) {
   try {
     await ensureToken();
     return await lowPUT(path, body);
+  } catch (err) {
+    if (err && (err.status === 401 || err.status === 403)) {
+      notifyMissingOrInvalidToken(
+        'Invalid API token. Please update your Raindrop API token.',
+      );
+    }
+    throw err;
+  }
+}
+
+export async function apiPUTFile(path, body) {
+  try {
+    await ensureToken();
+    return await lowPUTFile(path, body);
   } catch (err) {
     if (err && (err.status === 401 || err.status === 403)) {
       notifyMissingOrInvalidToken(

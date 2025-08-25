@@ -59,6 +59,35 @@ export async function apiGET(pathWithQuery) {
 }
 
 /**
+ * Performs a PUT request with a multipart/form-data body.
+ *
+ * @param {string} path - The API path.
+ * @param {FormData} body - The form data.
+ * @returns {Promise<any>} The parsed JSON response.
+ */
+export async function apiPUTFile(path, body) {
+  const url = `${RAINDROP_API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+  await loadTokenIfNeeded();
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${RAINDROP_API_TOKEN}`,
+    },
+    body: body,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    const err = new Error(
+      `Raindrop API error ${res.status} for ${path}: ${text}`,
+    );
+    err['status'] = res.status;
+    err['statusText'] = res.statusText;
+    throw err;
+  }
+  return res.json();
+}
+
+/**
  * Performs a GET request and returns raw text (no JSON parsing).
  * Useful for endpoints like export.html that return text/html.
  *
@@ -182,6 +211,20 @@ export async function apiDELETE(path) {
   } catch (_) {
     return {};
   }
+}
+
+/**
+ * Uploads a cover image for a raindrop.
+ *
+ * @param {number} raindropId - The ID of the raindrop.
+ * @param {string} dataUrl - The data URL of the image to upload.
+ * @returns {Promise<any>} The parsed JSON response.
+ */
+export async function uploadCover(raindropId, dataUrl) {
+  const blob = await (await fetch(dataUrl)).blob();
+  const formData = new FormData();
+  formData.append('cover', blob, 'screenshot.jpg');
+  return apiPUTFile(`/raindrop/${raindropId}/cover`, formData);
 }
 
 /**
