@@ -20,6 +20,9 @@
   const settingsBtn = /** @type {HTMLButtonElement|null} */ (
     document.getElementById('settings-btn')
   );
+  const raindropBtn = /** @type {HTMLButtonElement|null} */ (
+    document.getElementById('raindrop-btn')
+  );
   const projectsRefreshingStatusEl = /** @type {HTMLSpanElement|null} */ (
     document.getElementById('projects-refreshing-status')
   );
@@ -29,6 +32,7 @@
     !(saveBtn instanceof HTMLButtonElement) ||
     !(saveProjectBtn instanceof HTMLButtonElement) ||
     !(settingsBtn instanceof HTMLButtonElement) ||
+    !(raindropBtn instanceof HTMLButtonElement) ||
     !(saveWindowProjectBtn instanceof HTMLButtonElement)
   )
     return;
@@ -436,5 +440,9 @@
 
   settingsBtn.addEventListener('click', () => {
     chrome.runtime.openOptionsPage();
+  });
+
+  raindropBtn.addEventListener('click', () => {
+    chrome.tabs.create({ url: 'https://app.raindrop.io/my/-1' });
   });
 })();
