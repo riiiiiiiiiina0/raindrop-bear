@@ -719,40 +719,35 @@ export async function addTabsToProject(chrome, collectionId, tabsList) {
   const existingItemsCount = existingItems.length;
 
   let sharedTabGroupInfo = undefined;
-  let allExistingInSameGroup = true;
-  if (existingItems.length > 0) {
-    for (const item of existingItems) {
-      if (item.note) {
-        try {
-          const meta = JSON.parse(item.note);
-          if (meta.tabGroup) {
-            if (sharedTabGroupInfo === undefined) {
-              sharedTabGroupInfo = {
-                tabGroup: meta.tabGroup,
-                tabGroupColor: meta.tabGroupColor,
-              };
-            } else if (sharedTabGroupInfo.tabGroup !== meta.tabGroup) {
-              allExistingInSameGroup = false;
-              break;
-            }
-          }
-        } catch (e) {
-          // Ignore parsing errors
-        }
+  let firstParsedItem = undefined;
+  const tabGroupsOfExistingItems = existingItems.map((item) => {
+    try {
+      const meta = JSON.parse(item.note);
+      if (firstParsedItem === undefined) {
+        firstParsedItem = meta;
       }
+      return meta.tabGroup;
+    } catch (e) {
+      return null;
     }
-    if (sharedTabGroupInfo === undefined) {
-      allExistingInSameGroup = false;
-    }
-  } else {
-    allExistingInSameGroup = false;
+  });
+
+  const uniqueTabGroups = [...new Set(tabGroupsOfExistingItems)];
+
+  if (uniqueTabGroups.length === 1) {
+    const tabGroup = uniqueTabGroups[0];
+    const { tabGroupColor = null } = firstParsedItem || {};
+    sharedTabGroupInfo = {
+      tabGroup,
+      tabGroupColor,
+    };
   }
 
   const newTabsAreUngrouped = eligibleTabs.every(
     (t) => !groupIdToMeta.has(t.groupId),
   );
 
-  const shouldAssignGroup = newTabsAreUngrouped && allExistingInSameGroup;
+  const shouldAssignGroup = newTabsAreUngrouped && sharedTabGroupInfo;
 
   const items = eligibleTabs.map((t, i) => {
     const baseTitle = t.title || t.url || '';
@@ -764,8 +759,8 @@ export async function addTabsToProject(chrome, collectionId, tabsList) {
       tabGroupColor: group && group.color,
     };
     if (shouldAssignGroup) {
-      meta.tabGroup = sharedTabGroupInfo.tabGroup;
-      meta.tabGroupColor = sharedTabGroupInfo.tabGroupColor;
+      meta.tabGroup = sharedTabGroupInfo?.tabGroup;
+      meta.tabGroupColor = sharedTabGroupInfo?.tabGroupColor;
     }
     return { link: t.url, title: baseTitle, note: JSON.stringify(meta) };
   });
