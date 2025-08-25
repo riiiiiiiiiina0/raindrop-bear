@@ -229,42 +229,55 @@
             window.close();
           });
 
-          const replaceBtn = document.createElement('button');
-          replaceBtn.type = 'button';
-          replaceBtn.title = 'Replace with current tabs';
-          replaceBtn.textContent = '⏫';
-          replaceBtn.className =
+          const replaceWithHighlightedBtn = document.createElement('button');
+          replaceWithHighlightedBtn.type = 'button';
+          if (count > 1) {
+            replaceWithHighlightedBtn.title = `Replace with ${count} highlighted tabs`;
+          } else {
+            replaceWithHighlightedBtn.title = `Replace with current tab`;
+          }
+          replaceWithHighlightedBtn.textContent = '🔼';
+          replaceWithHighlightedBtn.className =
             'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
-          replaceBtn.addEventListener('click', async (e) => {
+          replaceWithHighlightedBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
-
-            const highlightedTabs = await getHighlightedTabs();
-            const count = highlightedTabs.length;
-            const replaceWithHighlighted = count > 1;
-
             const ok = confirm(
               `Replace project "${String(it.title || 'Untitled')}" with ${
-                replaceWithHighlighted
-                  ? `${count} highlighted tabs`
-                  : 'tabs in current window'
+                count > 1 ? `${count} highlighted tabs` : 'the current tab'
               }?`,
             );
             if (!ok) return;
-
             disableAllButtons();
             setStatus('Replacing…');
-            if (replaceWithHighlighted) {
-              await sendCommand('replaceSavedProject', {
-                id: it.id,
-                useHighlighted: true,
-              });
-            } else {
-              await sendCommand('replaceSavedProject', {
-                id: it.id,
-                useHighlighted: false,
-              });
-            }
+            await sendCommand('replaceSavedProject', {
+              id: it.id,
+              useHighlighted: true,
+            });
+            window.close();
+          });
+
+          const replaceWithWindowBtn = document.createElement('button');
+          replaceWithWindowBtn.type = 'button';
+          replaceWithWindowBtn.title = 'Replace with current window';
+          replaceWithWindowBtn.textContent = '⏫';
+          replaceWithWindowBtn.className =
+            'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+          replaceWithWindowBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const ok = confirm(
+              `Replace project "${String(
+                it.title || 'Untitled',
+              )}" with tabs in the current window?`,
+            );
+            if (!ok) return;
+            disableAllButtons();
+            setStatus('Replacing…');
+            await sendCommand('replaceSavedProject', {
+              id: it.id,
+              useHighlighted: false,
+            });
             window.close();
           });
 
@@ -299,7 +312,8 @@
           function disableAllButtons() {
             addBtn.disabled = true;
             deleteBtn.disabled = true;
-            replaceBtn.disabled = true;
+            replaceWithHighlightedBtn.disabled = true;
+            replaceWithWindowBtn.disabled = true;
             openInNewBtn.disabled = true;
             openInRaindropBtn.disabled = true;
             li.classList.add('opacity-60');
@@ -307,7 +321,8 @@
 
           right.className = 'flex items-center gap-1 hidden group-hover:flex';
           right.appendChild(addBtn);
-          right.appendChild(replaceBtn);
+          right.appendChild(replaceWithHighlightedBtn);
+          right.appendChild(replaceWithWindowBtn);
           right.appendChild(openInNewBtn);
           right.appendChild(openInRaindropBtn);
           right.appendChild(deleteBtn);
