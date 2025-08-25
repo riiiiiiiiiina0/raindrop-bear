@@ -163,7 +163,7 @@
         for (const it of items) {
           const li = document.createElement('li');
           li.className =
-            'pl-4 pr-1 py-1 h-8 text-sm hover:bg-gray-200 dark:hover:bg-gray-800 flex items-center justify-between gap-2 cursor-pointer group';
+            'pl-4 pr-1 py-1 text-sm hover:bg-gray-200 dark:hover:bg-gray-800 flex justify-between gap-2 cursor-pointer group';
 
           const left = document.createElement('div');
           left.className = 'flex min-w-0 items-center gap-2';
@@ -185,19 +185,41 @@
           const title = document.createElement('span');
           title.className = 'truncate';
           title.textContent = String(it.title || 'Untitled');
-          // const meta = document.createElement('span');
-          // meta.className = 'shrink-0 text-[10px] text-gray-400';
-          // const parts = [];
-          // if (typeof it.count === 'number') parts.push(`${it.count}`);
-          // if (it.lastUpdate)
-          //   parts.push(new Date(it.lastUpdate).toLocaleDateString());
-          // meta.textContent = parts.join(' · ');
           left.appendChild(avatar);
           left.appendChild(title);
-          // left.appendChild(meta);
+
+          const rightContainer = document.createElement('div');
+          rightContainer.className = 'flex-none text-right';
+
+          const meta = document.createElement('div');
+          meta.className = 'group-hover:hidden';
+
+          const countSpan = document.createElement('div');
+          countSpan.className =
+            'text-xs text-gray-900/50 dark:text-gray-100/50';
+          if (typeof it.count === 'number') {
+            countSpan.textContent = `${it.count} tab${
+              it.count === 1 ? '' : 's'
+            }`;
+          }
+
+          const timeSpan = document.createElement('div');
+          timeSpan.className =
+            'text-xs text-gray-900/50 dark:text-gray-100/50';
+          if (it.lastUpdate) {
+            const d = new Date(it.lastUpdate);
+            const MM = String(d.getMonth() + 1).padStart(2, '0');
+            const DD = String(d.getDate()).padStart(2, '0');
+            const HH = String(d.getHours()).padStart(2, '0');
+            const mm = String(d.getMinutes()).padStart(2, '0');
+            timeSpan.textContent = `${MM}/${DD} ${HH}:${mm}`;
+          }
+
+          if (countSpan.textContent) meta.appendChild(countSpan);
+          if (timeSpan.textContent) meta.appendChild(timeSpan);
+          rightContainer.appendChild(meta);
 
           const right = document.createElement('div');
-          right.className = 'flex items-center gap-1';
 
           const addBtn = document.createElement('button');
           addBtn.type = 'button';
@@ -292,7 +314,7 @@
           openInNewBtn.className =
             'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
           openInNewBtn.addEventListener('click', async (e) => {
-              e.preventDefault();
+            e.preventDefault();
             e.stopPropagation();
             disableAllButtons();
             setStatus('Recovering project in new window…');
@@ -330,9 +352,10 @@
           right.appendChild(openInNewBtn);
           right.appendChild(openInRaindropBtn);
           right.appendChild(deleteBtn);
+          rightContainer.appendChild(right);
 
           li.appendChild(left);
-          li.appendChild(right);
+          li.appendChild(rightContainer);
           li.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
