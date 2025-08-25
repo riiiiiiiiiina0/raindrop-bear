@@ -523,6 +523,7 @@ export async function saveTabsListAsProject(chrome, name, tabsList) {
             title: it.title,
             note: it.note,
             collection: { $id: Number(projectCollectionId) },
+            pleaseParse: {},
           });
         } catch (_) {}
       }
@@ -648,6 +649,7 @@ export async function replaceSavedProjectWithTabs(
         title: it.title,
         note: it.note,
         collection: { $id: Number(newId) },
+        pleaseParse: {},
       })),
     });
   } catch (_) {
@@ -658,6 +660,7 @@ export async function replaceSavedProjectWithTabs(
           title: it.title,
           note: it.note,
           collection: { $id: Number(newId) },
+          pleaseParse: {},
         });
       } catch (_) {}
     }
@@ -734,6 +737,7 @@ export async function addTabsToProject(chrome, collectionId, tabsList) {
         title: it.title,
         note: it.note,
         collection: { $id: Number(colId) },
+        pleaseParse: {},
       })),
     });
   } catch (_) {
@@ -744,6 +748,7 @@ export async function addTabsToProject(chrome, collectionId, tabsList) {
           title: it.title,
           note: it.note,
           collection: { $id: Number(colId) },
+          pleaseParse: {},
         });
       } catch (_) {}
     }

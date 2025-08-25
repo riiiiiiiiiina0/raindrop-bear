@@ -229,6 +229,7 @@ export async function overrideCollectionWithWindowTabs(
         title: it.title,
         note: it.note,
         collection: { $id: Number(collectionId) },
+        pleaseParse: {},
       })),
     });
   } catch (_) {
@@ -239,6 +240,7 @@ export async function overrideCollectionWithWindowTabs(
           title: it.title,
           note: it.note,
           collection: { $id: Number(collectionId) },
+          pleaseParse: {},
         });
       } catch (_) {}
     }
