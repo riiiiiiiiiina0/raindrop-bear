@@ -718,6 +718,37 @@ export async function addTabsToProject(chrome, collectionId, tabsList) {
       : [];
   const existingItemsCount = existingItems.length;
 
+  let sharedTabGroupInfo = undefined;
+  let firstParsedItem = undefined;
+  const tabGroupsOfExistingItems = existingItems.map((item) => {
+    try {
+      const meta = JSON.parse(item.note);
+      if (firstParsedItem === undefined) {
+        firstParsedItem = meta;
+      }
+      return meta.tabGroup;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  const uniqueTabGroups = [...new Set(tabGroupsOfExistingItems)];
+
+  if (uniqueTabGroups.length === 1) {
+    const tabGroup = uniqueTabGroups[0];
+    const { tabGroupColor = null } = firstParsedItem || {};
+    sharedTabGroupInfo = {
+      tabGroup,
+      tabGroupColor,
+    };
+  }
+
+  const newTabsAreUngrouped = eligibleTabs.every(
+    (t) => !groupIdToMeta.has(t.groupId),
+  );
+
+  const shouldAssignGroup = newTabsAreUngrouped && sharedTabGroupInfo;
+
   const items = eligibleTabs.map((t, i) => {
     const baseTitle = t.title || t.url || '';
     const group = groupIdToMeta.get(t.groupId) || null;
@@ -727,6 +758,10 @@ export async function addTabsToProject(chrome, collectionId, tabsList) {
       tabGroup: group && group.title,
       tabGroupColor: group && group.color,
     };
+    if (shouldAssignGroup) {
+      meta.tabGroup = sharedTabGroupInfo?.tabGroup;
+      meta.tabGroupColor = sharedTabGroupInfo?.tabGroupColor;
+    }
     return { link: t.url, title: baseTitle, note: JSON.stringify(meta) };
   });
 
