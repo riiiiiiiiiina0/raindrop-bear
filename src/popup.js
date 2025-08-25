@@ -163,7 +163,7 @@
         for (const it of items) {
           const li = document.createElement('li');
           li.className =
-            'pl-4 pr-1 py-1 h-8 text-sm hover:bg-gray-200 dark:hover:bg-gray-800 flex items-center justify-between gap-2 cursor-pointer group';
+            'pl-4 pr-1 py-1 h-9 text-sm hover:bg-gray-200 dark:hover:bg-gray-800 flex justify-between gap-2 cursor-pointer group border-t border-gray-100 dark:border-gray-800';
 
           const left = document.createElement('div');
           left.className = 'flex min-w-0 items-center gap-2';
@@ -185,19 +185,90 @@
           const title = document.createElement('span');
           title.className = 'truncate';
           title.textContent = String(it.title || 'Untitled');
-          // const meta = document.createElement('span');
-          // meta.className = 'shrink-0 text-[10px] text-gray-400';
-          // const parts = [];
-          // if (typeof it.count === 'number') parts.push(`${it.count}`);
-          // if (it.lastUpdate)
-          //   parts.push(new Date(it.lastUpdate).toLocaleDateString());
-          // meta.textContent = parts.join(' · ');
           left.appendChild(avatar);
           left.appendChild(title);
-          // left.appendChild(meta);
+
+          const rightContainer = document.createElement('div');
+          rightContainer.className = 'flex-none text-right';
+
+          const meta = document.createElement('div');
+          {
+            // Determine opacity based on age of lastUpdate
+            let opacityClass = 'opacity-20';
+            if (it.lastUpdate) {
+              const now = Date.now();
+              const updated = new Date(it.lastUpdate).getTime();
+              const diffMs = now - updated;
+              const oneDay = 24 * 60 * 60 * 1000;
+              const oneWeek = 7 * oneDay;
+              const oneMonth = 30 * oneDay;
+              if (diffMs <= oneDay) {
+                opacityClass = 'opacity-80';
+              } else if (diffMs <= oneWeek) {
+                opacityClass = 'opacity-60';
+              } else if (diffMs <= oneMonth) {
+                opacityClass = 'opacity-40';
+              }
+            }
+            meta.className = `group-hover:hidden text-gray-900 ${opacityClass}`;
+          }
+
+          const timeSpan = document.createElement('div');
+          timeSpan.className = 'text-[8px]';
+          if (it.lastUpdate) {
+            const d = new Date(it.lastUpdate);
+            const now = new Date();
+            const HH = String(d.getHours()).padStart(2, '0');
+            const mm = String(d.getMinutes()).padStart(2, '0');
+
+            // Get local date parts
+            const dYear = d.getFullYear();
+            const dMonth = d.getMonth();
+            const dDate = d.getDate();
+
+            const nowYear = now.getFullYear();
+            const nowMonth = now.getMonth();
+            const nowDate = now.getDate();
+
+            // Calculate difference in days
+            const msPerDay = 24 * 60 * 60 * 1000;
+            // Zero out time for both dates
+            const dMidnight = new Date(dYear, dMonth, dDate);
+            const nowMidnight = new Date(nowYear, nowMonth, nowDate);
+            const diffDays = Math.round(
+              (nowMidnight.getTime() - dMidnight.getTime()) / msPerDay,
+            );
+
+            if (dYear === nowYear && dMonth === nowMonth && dDate === nowDate) {
+              // Same day
+              timeSpan.textContent = `Today ${HH}:${mm}`;
+            } else if (diffDays === 1) {
+              // Yesterday
+              timeSpan.textContent = `Yesterday ${HH}:${mm}`;
+            } else if (diffDays > 1 && diffDays < 7) {
+              // Within a week
+              timeSpan.textContent = `${diffDays} days ago ${HH}:${mm}`;
+            } else {
+              // Others
+              const MM = String(dMonth + 1).padStart(2, '0');
+              const DD = String(dDate).padStart(2, '0');
+              timeSpan.textContent = `${MM}/${DD} ${HH}:${mm}`;
+            }
+          }
+
+          const countSpan = document.createElement('div');
+          countSpan.className = 'text-[10px]';
+          if (typeof it.count === 'number') {
+            countSpan.textContent = `${it.count} tab${
+              it.count === 1 ? '' : 's'
+            }`;
+          }
+
+          if (timeSpan.textContent) meta.appendChild(timeSpan);
+          if (countSpan.textContent) meta.appendChild(countSpan);
+          rightContainer.appendChild(meta);
 
           const right = document.createElement('div');
-          right.className = 'flex items-center gap-1';
 
           const addBtn = document.createElement('button');
           addBtn.type = 'button';
@@ -292,7 +363,7 @@
           openInNewBtn.className =
             'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
           openInNewBtn.addEventListener('click', async (e) => {
-              e.preventDefault();
+            e.preventDefault();
             e.stopPropagation();
             disableAllButtons();
             setStatus('Recovering project in new window…');
@@ -330,9 +401,10 @@
           right.appendChild(openInNewBtn);
           right.appendChild(openInRaindropBtn);
           right.appendChild(deleteBtn);
+          rightContainer.appendChild(right);
 
           li.appendChild(left);
-          li.appendChild(right);
+          li.appendChild(rightContainer);
           li.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
