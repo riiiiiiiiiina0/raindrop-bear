@@ -162,8 +162,12 @@
       } else {
         for (const it of items) {
           const li = document.createElement('li');
-          li.className =
-            'pl-4 pr-1 py-1 h-9 text-sm hover:bg-gray-200 dark:hover:bg-gray-800 flex justify-between gap-2 cursor-pointer group border-t border-gray-100 dark:border-gray-800';
+          const isZeroTabs = it.count === 0;
+          li.className = `pl-4 pr-1 py-1 h-9 text-sm flex justify-between gap-2 group border-t border-gray-100 dark:border-gray-800 ${
+            isZeroTabs
+              ? 'opacity-60 cursor-not-allowed'
+              : 'hover:bg-gray-200 dark:hover:bg-gray-800 cursor-pointer'
+          }`;
 
           const left = document.createElement('div');
           left.className = 'flex min-w-0 items-center gap-2';
@@ -361,7 +365,10 @@
           openInNewBtn.title = 'Open in new window';
           openInNewBtn.textContent = '↗️';
           openInNewBtn.className =
-            'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+            'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer disabled:opacity-50';
+          if (isZeroTabs) {
+            openInNewBtn.disabled = true;
+          }
           openInNewBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -408,16 +415,18 @@
 
           li.appendChild(left);
           li.appendChild(rightContainer);
-          li.addEventListener('click', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setStatus('Recovering project…');
-            await sendCommand('recoverSavedProject', {
-              id: it.id,
-              title: it.title,
+          if (!isZeroTabs) {
+            li.addEventListener('click', async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setStatus('Recovering project…');
+              await sendCommand('recoverSavedProject', {
+                id: it.id,
+                title: it.title,
+              });
+              window.close();
             });
-            window.close();
-          });
+          }
           projectsListEl.appendChild(li);
         }
       }
