@@ -125,6 +125,18 @@ export async function recoverSavedProject(chrome, collectionId, options) {
     const sorted = items.sort(
       (a, b) => (a.meta?.index ?? 0) - (b.meta?.index ?? 0),
     );
+    const hasTabGroups = sorted.some((it) => it.meta?.tabGroup);
+    if (!hasTabGroups && sorted.length > 0) {
+      const projectTitle = options?.title;
+      if (projectTitle) {
+        for (const item of sorted) {
+          if (!item.meta) {
+            item.meta = {};
+          }
+          item.meta.tabGroup = projectTitle;
+        }
+      }
+    }
     const first = sorted[0];
     // Determine whether to reuse current window (if it has one empty non-pinned tab)
     const isEmptyNewTabUrl = (u) => {
