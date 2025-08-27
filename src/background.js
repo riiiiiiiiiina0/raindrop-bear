@@ -782,17 +782,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
       if (message && message.type === 'recoverSavedProject') {
-        const id = message && message.id;
+        const { id, title } = message || {};
         const restoreResult = await recoverSavedProject(chrome, id, {
           forceNewWindow: false,
+          title,
         });
         sendResponse({ ok: true });
         return;
       }
       if (message && message.type === 'recoverSavedProjectInNewWindow') {
-        const id = message && message.id;
+        const { id, title } = message || {};
         await recoverSavedProject(chrome, id, {
           forceNewWindow: true,
+          title,
         });
         sendResponse({ ok: true });
         return;

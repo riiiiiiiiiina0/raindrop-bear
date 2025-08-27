@@ -367,7 +367,10 @@
             e.stopPropagation();
             disableAllButtons();
             setStatus('Recovering project in new window…');
-            await sendCommand('recoverSavedProjectInNewWindow', { id: it.id });
+            await sendCommand('recoverSavedProjectInNewWindow', {
+              id: it.id,
+              title: it.title,
+            });
             window.close();
           });
 
@@ -409,7 +412,10 @@
             e.preventDefault();
             e.stopPropagation();
             setStatus('Recovering project…');
-            await sendCommand('recoverSavedProject', { id: it.id });
+            await sendCommand('recoverSavedProject', {
+              id: it.id,
+              title: it.title,
+            });
             window.close();
           });
           projectsListEl.appendChild(li);
