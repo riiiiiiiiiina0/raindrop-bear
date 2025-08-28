@@ -11,7 +11,8 @@
     "unlimitedStorage",
     "notifications",
     "alarms",
-    "contextMenus"
+    "contextMenus",
+    "clipboardRead"
   ],
   "host_permissions": [
     "https://api.raindrop.io/*"

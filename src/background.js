@@ -1,37 +1,21 @@
 // Raindrop Bear Background Service Worker (Manifest V3) – modular orchestration
+import { apiPOST, setFacadeToken } from './modules/api-facade.js';
 import {
-  apiGET,
-  apiPOST,
-  apiPUT,
-  apiDELETE,
-  apiGETText,
-  setFacadeToken,
-} from './modules/api-facade.js';
-import {
-  notifyMissingOrInvalidToken,
   TOKEN_NOTIFICATION_ID,
   notifySyncFailure,
   notifySyncSuccess,
   SYNC_SUCCESS_NOTIFICATION_ID,
+  notifyUnsortedSave,
+  UNSORTED_SAVE_NOTIFICATION_ID,
   notify,
 } from './modules/notifications.js';
 import {
-  ROOT_FOLDER_NAME,
   UNSORTED_COLLECTION_ID,
-  getOrCreateRootFolder as bmGetOrCreateRootFolder,
-  getOrCreateChildFolder as bmGetOrCreateChildFolder,
-  getBookmarksBarFolderId,
   removeLegacyTopFolders,
 } from './modules/bookmarks.js';
 import { chromeP } from './modules/chrome.js';
-import {
-  setBadge,
-  clearBadge,
-  scheduleClearBadge,
-  setActionTitle,
-  flashBadge,
-} from './modules/ui.js';
-import { STORAGE_KEYS, loadState, saveState } from './modules/state.js';
+import { setBadge, clearBadge, flashBadge } from './modules/ui.js';
+import { loadState, saveState } from './modules/state.js';
 import {
   fetchGroupsAndCollections,
   buildCollectionsIndex,
@@ -44,34 +28,24 @@ import {
   syncFolders,
 } from './modules/folder-sync.js';
 import {
-  extractCollectionId,
-  ensureUnsortedFolder,
   syncNewAndUpdatedItems,
   syncDeletedItems,
 } from './modules/item-sync.js';
 import { ensureRootAndMaybeReset } from './modules/root-ensure.js';
-import { invertRecord } from './modules/utils.js';
 import {
   isSyncing,
   setIsSyncing,
-  suppressLocalBookmarkEvents,
   setSuppressLocalBookmarkEvents,
-  recentlyCreatedRemoteUrls,
-  rememberRecentlyCreatedRemoteUrls,
 } from './modules/shared-state.js';
 import {
   ACTIVE_SYNC_SESSIONS_KEY,
   WINDOW_SYNC_ALARM_PREFIX,
   windowSyncSessions,
   loadActiveSyncSessionsIntoMemory,
-  persistActiveSyncSessions,
   scheduleWindowSync,
   stopWindowSync,
-  createCollectionUnderSavedProjects,
-  overrideCollectionWithWindowTabs,
   restoreActionUiForActiveWindow,
-  projectNameWithoutPrefix,
-  startSyncWindowToExistingProject,
+  overrideCollectionWithWindowTabs,
 } from './modules/window-sync.js';
 import {
   listSavedProjects,
@@ -243,7 +217,7 @@ async function saveUrlToUnsorted(url, title) {
       pleaseParse: {},
     };
     await apiPOST('/raindrop', body);
-    notify('Link saved to Unsorted!');
+    notifyUnsortedSave('Link saved to Unsorted!');
     flashBadge(true);
   } catch (err) {
     console.error('Failed to save link to Unsorted:', err);
@@ -773,6 +747,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: true });
         return;
       }
+      if (message && message.type === 'saveUrlToUnsorted') {
+        const { url, title } = message;
+        await saveUrlToUnsorted(url, title);
+        sendResponse({ ok: true });
+        return;
+      }
       if (message && message.type === 'performSync') {
         await performSync();
         sendResponse({ ok: true });
@@ -916,6 +896,15 @@ chrome.notifications?.onClicked.addListener((notificationId) => {
         chrome.notifications.clear(notificationId);
       } catch (_) {}
     })();
+  } else if (notificationId === UNSORTED_SAVE_NOTIFICATION_ID) {
+    try {
+      chrome.tabs?.create({
+        url: 'https://app.raindrop.io/my/-1',
+      });
+    } catch (_) {}
+    try {
+      chrome.notifications.clear(notificationId);
+    } catch (_) {}
   } else if (String(notificationId).startsWith('project-saved-')) {
     const collectionId = String(notificationId).substring(
       'project-saved-'.length,
