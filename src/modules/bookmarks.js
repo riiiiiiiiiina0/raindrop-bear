@@ -51,8 +51,14 @@ export async function getOrCreateRootFolder(loadState, saveState) {
     for (const folder of existingFolders) {
       await chromeP.bookmarksRemoveTree(folder.id);
     }
-    // Force a full re-sync by clearing the lastSync state.
-    await saveState({ lastSync: null, rootFolderId: null });
+    // Force a full re-sync by clearing all state.
+    await saveState({
+      lastSync: null,
+      rootFolderId: null,
+      collectionMap: {},
+      groupMap: {},
+      itemMap: {},
+    });
     // Fall through to create a new folder from scratch.
   } else if (existingFolders.length === 1) {
     const existing = existingFolders[0];
