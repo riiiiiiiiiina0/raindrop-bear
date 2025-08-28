@@ -45,11 +45,28 @@ export async function getOrCreateRootFolder(loadState, saveState) {
     state.parentFolderId || (await getBookmarksBarFolderId());
 
   const children = await chromeP.bookmarksGetChildren(parentFolderId);
-  const existing = children.find((c) => c.title === ROOT_FOLDER_NAME && !c.url);
-  if (existing) {
+  // Find all folders with the root folder name, not just the first one.
+  const existingFolders = children.filter(
+    (c) => c.title === ROOT_FOLDER_NAME && !c.url,
+  );
+
+  // If we have more than one, it's an ambiguous situation.
+  // The best approach is to remove them all and start fresh with a full sync.
+  if (existingFolders.length > 1) {
+    // Nuke all found folders.
+    for (const folder of existingFolders) {
+      await chromeP.bookmarksRemoveTree(folder.id);
+    }
+    // Force a full re-sync by clearing the lastSync state.
+    await saveState({ lastSync: null, rootFolderId: null });
+    // Fall through to create a new folder from scratch.
+  } else if (existingFolders.length === 1) {
+    const existing = existingFolders[0];
     await saveState({ rootFolderId: existing.id });
     return existing.id;
   }
+
+  // This part runs if there were no folders, or if we just deleted multiple.
   const node = await chromeP.bookmarksCreate({
     parentId: parentFolderId,
     title: ROOT_FOLDER_NAME,
