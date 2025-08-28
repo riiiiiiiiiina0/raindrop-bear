@@ -130,10 +130,12 @@ async function performSync() {
   setBadge('🔄', '#38bdf8');
   try {
     let state = await loadState();
-    const { didReset, state: updatedState } = await ensureRootAndMaybeReset(
-      state,
-    );
-    if (didReset) state = updatedState;
+    const {
+      didReset,
+      rootFolderId,
+      state: updatedState,
+    } = await ensureRootAndMaybeReset();
+    state = updatedState;
     const { groups, rootCollections, childCollections } =
       await fetchGroupsAndCollections();
     const SAVED_PROJECTS_TITLE = 'Saved Projects';

@@ -1,73 +1,23 @@
-import { chromeP } from './chrome.js';
-import { getBookmarksBarFolderId, ROOT_FOLDER_NAME } from './bookmarks.js';
-import { saveState as saveStateFn } from './state.js';
+import { getOrCreateRootFolder } from './bookmarks.js';
+import { loadState, saveState } from './state.js';
 
-export async function ensureRootAndMaybeReset(state) {
-  let rootExists = false;
-  const { rootFolderId, parentFolderId } = state || {};
+export async function ensureRootAndMaybeReset() {
+  const originalState = await loadState();
+  const originalRootId = originalState.rootFolderId;
 
-  if (rootFolderId) {
-    try {
-      const nodes = await chromeP.bookmarksGet(String(rootFolderId));
-      if (nodes?.length > 0) {
-        rootExists = true;
-      }
-    } catch (_) {
-      rootExists = false;
-    }
-  }
+  // `getOrCreateRootFolder` now contains all the logic for finding, creating,
+  // or cleaning up and re-creating the root folder. It will also modify
+  // the state (e.g., clearing lastSync) if duplicates are found and removed.
+  const newRootId = await getOrCreateRootFolder(loadState, saveState);
 
-  if (rootExists) {
-    return { didReset: false, rootFolderId: String(rootFolderId), state };
-  }
+  const didReset = !originalRootId || originalRootId !== newRootId;
 
-  // If root doesn't exist, try to find it by name in the correct parent folder
-  const parentId = parentFolderId || (await getBookmarksBarFolderId());
-  let newRootId = null;
+  // Load the state again, as it might have been modified by getOrCreateRootFolder
+  const finalState = await loadState();
 
-  try {
-    const children = await chromeP.bookmarksGetChildren(String(parentId));
-    const existing = children.find(
-      (c) => c && !c.url && c.title === ROOT_FOLDER_NAME,
-    );
-    if (existing) {
-      newRootId = existing.id;
-    }
-  } catch (error) {
-    console.error(
-      'Error searching for existing root folder, will create a new one.',
-      error,
-    );
-  }
-
-  // If still no root, create it
-  if (!newRootId) {
-    try {
-      const node = await chromeP.bookmarksCreate({
-        parentId: String(parentId),
-        title: ROOT_FOLDER_NAME,
-      });
-      newRootId = node.id;
-    } catch (error) {
-      console.error(
-        'Failed to create a new root folder. Sync cannot proceed.',
-        error,
-      );
-      // If creation fails, we cannot proceed.
-      return { didReset: false, rootFolderId: null, state };
-    }
-  }
-
-  // Since we either found a new root or created one, state is stale. Reset it.
-  const clearedState = {
-    ...(state || {}),
-    lastSync: null,
-    collectionMap: {},
-    groupMap: {},
-    itemMap: {},
+  return {
+    didReset,
     rootFolderId: newRootId,
+    state: finalState,
   };
-  await saveStateFn(clearedState);
-
-  return { didReset: true, rootFolderId: newRootId, state: clearedState };
 }
