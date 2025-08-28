@@ -99,22 +99,13 @@ export async function syncNewAndUpdatedItems(
               didChange = true;
             }
             if (!shouldSkipCreate && targetFolderId) {
-              if (isInitial) {
-                if (node.parentId !== targetFolderId) {
-                  await chromeP.bookmarksMove(localId, {
-                    parentId: targetFolderId,
-                  });
-                  didChange = true;
-                }
-              } else {
-                const current = folderInsertionCount.get(targetFolderId) || 0;
-                folderInsertionCount.set(targetFolderId, current + 1);
-                await chromeP.bookmarksMove(localId, {
-                  parentId: targetFolderId,
-                  index: current,
-                });
-                didChange = true;
-              }
+              const current = folderInsertionCount.get(targetFolderId) || 0;
+              folderInsertionCount.set(targetFolderId, current + 1);
+              await chromeP.bookmarksMove(localId, {
+                parentId: targetFolderId,
+                index: current,
+              });
+              didChange = true;
             }
           } else {
             if (!shouldSkipCreate && targetFolderId) {
@@ -123,11 +114,9 @@ export async function syncNewAndUpdatedItems(
                 title: item.title || '',
                 url: item.link || item.url || '',
               };
-              if (!isInitial) {
-                const current = folderInsertionCount.get(targetFolderId) || 0;
-                folderInsertionCount.set(targetFolderId, current + 1);
-                createDetails.index = current;
-              }
+              const current = folderInsertionCount.get(targetFolderId) || 0;
+              folderInsertionCount.set(targetFolderId, current + 1);
+              createDetails.index = current;
               const newNode = await chromeP.bookmarksCreate(createDetails);
               itemMap[raindropId] = newNode.id;
               didChange = true;
@@ -148,11 +137,9 @@ export async function syncNewAndUpdatedItems(
                 title: item.title || '',
                 url: item.link || item.url || '',
               };
-              if (!isInitial) {
-                const current = folderInsertionCount.get(targetFolderId) || 0;
-                folderInsertionCount.set(targetFolderId, current + 1);
-                createDetails.index = current;
-              }
+              const current = folderInsertionCount.get(targetFolderId) || 0;
+              folderInsertionCount.set(targetFolderId, current + 1);
+              createDetails.index = current;
               const newNode = await chromeP.bookmarksCreate(createDetails);
               itemMap[raindropId] = newNode.id;
               didChange = true;
@@ -172,11 +159,9 @@ export async function syncNewAndUpdatedItems(
                 title: item.title || '',
                 url: url,
               };
-              if (!isInitial) {
-                const current = folderInsertionCount.get(targetFolderId) || 0;
-                folderInsertionCount.set(targetFolderId, current + 1);
-                createDetails.index = current;
-              }
+              const current = folderInsertionCount.get(targetFolderId) || 0;
+              folderInsertionCount.set(targetFolderId, current + 1);
+              createDetails.index = current;
               const newNode = await chromeP.bookmarksCreate(createDetails);
               itemMap[raindropId] = newNode.id;
               didChange = true;
@@ -202,12 +187,10 @@ export async function syncNewAndUpdatedItems(
                     title: item.title || '',
                     url: url,
                   };
-                  if (!isInitial) {
-                    const current =
-                      folderInsertionCount.get(targetFolderId) || 0;
-                    folderInsertionCount.set(targetFolderId, current + 1);
-                    createDetails.index = current;
-                  }
+                  const current =
+                    folderInsertionCount.get(targetFolderId) || 0;
+                  folderInsertionCount.set(targetFolderId, current + 1);
+                  createDetails.index = current;
                   const newNode = await chromeP.bookmarksCreate(createDetails);
                   itemMap[raindropId] = newNode.id;
                   didChange = true;
