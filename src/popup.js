@@ -550,19 +550,6 @@
     }
   }
 
-  (async () => {
-    if (navigator.clipboard) {
-      try {
-        const text = await navigator.clipboard.readText();
-        if (text && isValidHttpUrl(text)) {
-          saveClipboardBtn.disabled = false;
-        }
-      } catch (err) {
-        console.error('Failed to read clipboard contents: ', err);
-      }
-    }
-  })();
-
   saveClipboardBtn.addEventListener('click', async () => {
     if (navigator.clipboard) {
       try {
@@ -574,6 +561,8 @@
           setStatus('');
           saveClipboardBtn.disabled = false;
           window.close();
+        } else {
+          setStatus('No URL found in clipboard.', 'error');
         }
       } catch (err) {
         console.error('Failed to read clipboard contents: ', err);
