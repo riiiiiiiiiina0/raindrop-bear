@@ -2,6 +2,7 @@ export const TOKEN_NOTIFICATION_ID = 'raindrop-token-required';
 let lastTokenNotificationMs = 0;
 export const SYNC_SUCCESS_NOTIFICATION_ID = 'raindrop-sync-success';
 export const SYNC_FAILURE_NOTIFICATION_ID = 'raindrop-sync-failure';
+export const UNSORTED_SAVE_NOTIFICATION_ID = 'raindrop-unsorted-save';
 
 /**
  * Shows a basic notification to the user with the given message.
@@ -63,6 +64,27 @@ export function notifySyncFailure(message) {
           message ||
           'An error occurred during sync. It will retry automatically.',
         priority: 1,
+      },
+      () => {},
+    );
+  } catch (_) {}
+}
+
+/**
+ * Shows a success notification for saving a link to unsorted.
+ * @param {string} message
+ */
+export function notifyUnsortedSave(message) {
+  try {
+    const iconUrl = chrome.runtime.getURL('icons/icon-128x128.png');
+    chrome.notifications?.create(
+      UNSORTED_SAVE_NOTIFICATION_ID,
+      {
+        type: 'basic',
+        iconUrl,
+        title: 'Raindrop Bear',
+        message: message || 'Link saved to Unsorted!',
+        priority: 0,
       },
       () => {},
     );

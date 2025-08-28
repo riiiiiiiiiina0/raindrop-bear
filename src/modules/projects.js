@@ -18,6 +18,7 @@ import {
   persistActiveSyncSessions,
 } from './window-sync.js';
 import { chromeP } from './chrome.js';
+import { notifyUnsortedSave } from './notifications.js';
 
 export async function listSavedProjects() {
   const [userRes, rootsRes] = await Promise.all([
@@ -390,7 +391,7 @@ export async function saveCurrentOrHighlightedTabsToRaindrop(chrome, chromeP) {
       setBadge('✔️', '#22c55e');
       scheduleClearBadge(3000);
       try {
-        notify(
+        notifyUnsortedSave(
           `Saved ${successCount} page${
             successCount > 1 ? 's' : ''
           } to Raindrop`,
