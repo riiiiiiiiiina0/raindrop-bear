@@ -5,6 +5,9 @@
   const saveBtn = /** @type {HTMLButtonElement|null} */ (
     document.getElementById('save-btn')
   );
+  const saveClipboardBtn = /** @type {HTMLButtonElement|null} */ (
+    document.getElementById('save-clipboard-btn')
+  );
   const saveProjectBtn = /** @type {HTMLButtonElement|null} */ (
     document.getElementById('save-project-btn')
   );
@@ -30,6 +33,7 @@
   if (
     !(syncBtn instanceof HTMLButtonElement) ||
     !(saveBtn instanceof HTMLButtonElement) ||
+    !(saveClipboardBtn instanceof HTMLButtonElement) ||
     !(saveProjectBtn instanceof HTMLButtonElement) ||
     !(settingsBtn instanceof HTMLButtonElement) ||
     !(raindropBtn instanceof HTMLButtonElement) ||
@@ -531,5 +535,50 @@
 
   raindropBtn.addEventListener('click', () => {
     chrome.tabs.create({ url: 'https://app.raindrop.io/my/-1' });
+  });
+
+  /**
+   * @param {string} str
+   * @returns {boolean}
+   */
+  function isValidHttpUrl(str) {
+    try {
+      const url = new URL(str);
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  (async () => {
+    if (navigator.clipboard) {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text && isValidHttpUrl(text)) {
+          saveClipboardBtn.disabled = false;
+        }
+      } catch (err) {
+        console.error('Failed to read clipboard contents: ', err);
+      }
+    }
+  })();
+
+  saveClipboardBtn.addEventListener('click', async () => {
+    if (navigator.clipboard) {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text && isValidHttpUrl(text)) {
+          saveClipboardBtn.disabled = true;
+          setStatus('Saving from clipboard…');
+          await sendCommand('saveUrlToUnsorted', { url: text, title: text });
+          setStatus('');
+          saveClipboardBtn.disabled = false;
+          window.close();
+        }
+      } catch (err) {
+        console.error('Failed to read clipboard contents: ', err);
+        setStatus('Failed to read clipboard.', 'error');
+      }
+    }
   });
 })();

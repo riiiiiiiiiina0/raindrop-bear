@@ -773,6 +773,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: true });
         return;
       }
+      if (message && message.type === 'saveUrlToUnsorted') {
+        const { url, title } = message;
+        await saveUrlToUnsorted(url, title);
+        sendResponse({ ok: true });
+        return;
+      }
       if (message && message.type === 'performSync') {
         await performSync();
         sendResponse({ ok: true });
