@@ -218,7 +218,7 @@
                 opacityClass = 'opacity-40';
               }
             }
-            meta.className = `group-hover:hidden text-gray-900 ${opacityClass}`;
+            meta.className = `group-hover:hidden text-gray-900 dark:text-gray-100 ${opacityClass}`;
           }
 
           const timeSpan = document.createElement('div');
