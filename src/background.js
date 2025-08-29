@@ -270,20 +270,17 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   const [major, minor, patch] =
     details.previousVersion?.split('.').map(Number) || [];
 
-  if (isUpdate) {
-    const prevVersion = details.previousVersion;
-    if (prevVersion) {
-      const [major, minor, patch] = prevVersion.split('.').map(Number);
-      if (major < 1 || (major === 1 && minor < 82)) {
-        try {
-          renameSavedProjectsGroup();
-        } catch (e) {
-          console.error('Failed to rename saved projects group', e);
-        }
-      }
+  const shouldMigrateSavedProjects = isUpdate && major === 1 && minor < 82;
+
+  const shouldShowUpdateNote = isUpdate && major === 1 && minor < 53;
+
+  if (shouldMigrateSavedProjects) {
+    try {
+      await renameSavedProjectsGroup();
+    } catch (e) {
+      console.error('Failed to rename saved projects group', e);
     }
   }
-  const shouldShowUpdateNote = isUpdate && major === 1 && minor < 53;
 
   // show update note on update
   if (shouldShowUpdateNote) {
