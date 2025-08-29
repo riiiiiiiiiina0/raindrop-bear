@@ -176,9 +176,21 @@
           const left = document.createElement('div');
           left.className = 'flex min-w-0 items-center gap-2';
 
+          const avatarLink = document.createElement('a');
+          avatarLink.href = `https://app.raindrop.io/my/${it.id}`;
+          avatarLink.title = 'Open project in raindrop';
+          avatarLink.className =
+            'relative h-4 w-4 rounded object-cover flex-none';
+          avatarLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            chrome.tabs.create({ url: avatarLink.href });
+          });
+
           // Avatar (cover image)
           const avatar = document.createElement('img');
-          avatar.className = 'h-4 w-4 rounded object-cover flex-none';
+          avatar.className =
+            'absolute inset-0 h-full w-full rounded object-cover group-hover:opacity-0 transition-opacity';
           const cover = (it && it.cover) || '';
           if (cover) {
             avatar.src = String(cover);
@@ -189,11 +201,18 @@
               'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
             avatar.alt = '';
           }
+          avatarLink.appendChild(avatar);
+
+          const globeSpan = document.createElement('span');
+          globeSpan.className =
+            'absolute inset-0 h-full w-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs';
+          globeSpan.textContent = '🌐';
+          avatarLink.appendChild(globeSpan);
 
           const title = document.createElement('span');
           title.className = 'truncate';
           title.textContent = String(it.title || 'Untitled');
-          left.appendChild(avatar);
+          left.appendChild(avatarLink);
           left.appendChild(title);
 
           const rightContainer = document.createElement('div');
@@ -364,47 +383,11 @@
             window.close();
           });
 
-          const openInNewBtn = document.createElement('button');
-          openInNewBtn.type = 'button';
-          openInNewBtn.title = 'Open in new window';
-          openInNewBtn.textContent = '↗️';
-          openInNewBtn.className =
-            'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer disabled:opacity-50';
-          if (isZeroTabs) {
-            openInNewBtn.disabled = true;
-          }
-          openInNewBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            disableAllButtons();
-            setStatus('Recovering project in new window…');
-            await sendCommand('recoverSavedProjectInNewWindow', {
-              id: it.id,
-              title: it.title,
-            });
-            window.close();
-          });
-
-          const openInRaindropBtn = document.createElement('button');
-          openInRaindropBtn.type = 'button';
-          openInRaindropBtn.title = 'Open collection in Raindrop.io';
-          openInRaindropBtn.textContent = '🌐';
-          openInRaindropBtn.className =
-            'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
-          openInRaindropBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const url = `https://app.raindrop.io/my/${it.id}`;
-            chrome.tabs.create({ url });
-          });
-
           function disableAllButtons() {
             addBtn.disabled = true;
             deleteBtn.disabled = true;
             replaceWithHighlightedBtn.disabled = true;
             replaceWithWindowBtn.disabled = true;
-            openInNewBtn.disabled = true;
-            openInRaindropBtn.disabled = true;
             li.classList.add('opacity-60');
           }
 
@@ -412,8 +395,6 @@
           right.appendChild(addBtn);
           right.appendChild(replaceWithHighlightedBtn);
           right.appendChild(replaceWithWindowBtn);
-          right.appendChild(openInNewBtn);
-          right.appendChild(openInRaindropBtn);
           right.appendChild(deleteBtn);
           rightContainer.appendChild(right);
 
@@ -423,11 +404,21 @@
             li.addEventListener('click', async (e) => {
               e.preventDefault();
               e.stopPropagation();
-              setStatus('Recovering project…');
-              await sendCommand('recoverSavedProject', {
-                id: it.id,
-                title: it.title,
-              });
+
+              const openInNewWindow = e.shiftKey || e.metaKey;
+              if (openInNewWindow) {
+                setStatus('Recovering project in new window…');
+                await sendCommand('recoverSavedProjectInNewWindow', {
+                  id: it.id,
+                  title: it.title,
+                });
+              } else {
+                setStatus('Recovering project…');
+                await sendCommand('recoverSavedProject', {
+                  id: it.id,
+                  title: it.title,
+                });
+              }
               window.close();
             });
           }
