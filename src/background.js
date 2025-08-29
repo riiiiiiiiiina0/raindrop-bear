@@ -894,6 +894,20 @@ chrome.notifications?.onClicked.addListener((notificationId) => {
     try {
       chrome.notifications.clear(notificationId);
     } catch (_) {}
+  } else if (String(notificationId).startsWith('project-archived-')) {
+    const collectionId = String(notificationId).substring(
+      'project-archived-'.length,
+    );
+    if (collectionId) {
+      try {
+        chrome.tabs?.create({
+          url: `https://app.raindrop.io/my/${collectionId}`,
+        });
+      } catch (_) {}
+    }
+    try {
+      chrome.notifications.clear(notificationId);
+    } catch (_) {}
   } else if (notificationId === SYNC_SUCCESS_NOTIFICATION_ID) {
     (async () => {
       try {

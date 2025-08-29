@@ -84,7 +84,26 @@ export async function archiveProject(collectionId) {
 
     setBadge('✔️', '#22c55e');
     scheduleClearBadge(3000);
-    notify(`Project archived successfully.`);
+    try {
+      const collection = await apiGET(
+        `/collection/${encodeURIComponent(colId)}`,
+      );
+      const title = collection?.item?.title || 'Project';
+      const iconUrl = chrome.runtime.getURL('icons/icon-128x128.png');
+      chrome.notifications?.create(
+        `project-archived-${colId}`,
+        {
+          type: 'basic',
+          iconUrl,
+          title: 'Raindrop Bear',
+          message: `Project "${title}" archived.`,
+          priority: 0,
+        },
+        () => {},
+      );
+    } catch (_) {
+      notify(`Project archived successfully.`);
+    }
   } catch (e) {
     setBadge('😵', '#ef4444');
     scheduleClearBadge(3000);
