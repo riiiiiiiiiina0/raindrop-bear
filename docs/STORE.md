@@ -9,7 +9,7 @@ Why you’ll love it
 ⏰ Auto‑sync every ~10 minutes: or run a manual sync from the popup  
 📁 Choose parent folder: place the Raindrop folder wherever you like (Bookmarks Bar by default)  
 📂 Unsorted handled: items in Raindrop “Unsorted” go to a matching Unsorted folder  
-💾 Saved Projects: save highlighted tabs as a named project in Raindrop, then recover it later from the popup  
+💾 Projects: save highlighted tabs as a named project in Raindrop, then recover it later from the popup
 ⏫ Live window sync: keep a Raindrop project in sync with your current window’s tabs until you stop it  
 🔕 Quiet by default: optional notifications after each sync
 
@@ -23,7 +23,7 @@ Popup actions
 
 🔄 Sync now
 📥 Save to Unsorted: send current/highlighted tabs to Raindrop Unsorted
-💾 Save as Project: save highlighted tabs under Raindrop → Saved Projects
+💾 Save as Project: save highlighted tabs under Raindrop → 🐻‍❄️ Projects
 ⏫ Sync current window as project: start live syncing the current window to a project (stop by closing the window)
 ♻️ Recover/Delete a project: reopen a saved project (restores order and tab groups when available) or delete it from the popup
 
@@ -33,7 +33,7 @@ Permissions (what and why)
 - storage / unlimitedStorage: keep lightweight sync state locally
 - notifications: optional “sync done/failed” messages
 - alarms: schedule periodic syncs
-- tabs: used by popup actions to save current/highlighted tabs and to recover Saved Projects into windows
+- tabs: used by popup actions to save current/highlighted tabs and to recover Projects into windows
 - Host: https://api.raindrop.io/* only
 
 Privacy
@@ -44,7 +44,7 @@ Privacy
 Notes
 
 - Sync is one‑way (Raindrop → local) within the managed Raindrop folder
-- The Raindrop group Saved Projects is kept cloud‑only and is not mirrored into local bookmarks
+- The Raindrop group 🐻‍❄️ Projects is kept cloud‑only and is not mirrored into local bookmarks
 - If you delete the Raindrop folder, the next sync will recreate it safely
 
 Need help or want to peek at the code? Visit the project on GitHub.
