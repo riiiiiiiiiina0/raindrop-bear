@@ -270,7 +270,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   const [major, minor, patch] =
     details.previousVersion?.split('.').map(Number) || [];
 
-  const shouldMigrateSavedProjects = isUpdate && major === 1 && minor < 82;
+  const shouldMigrateSavedProjects = isUpdate && major === 1 && minor <= 82;
 
   const shouldShowUpdateNote = isUpdate && major === 1 && minor < 53;
 
