@@ -312,6 +312,42 @@
             window.close();
           });
 
+          const archiveBtn = document.createElement('button');
+          archiveBtn.type = 'button';
+          archiveBtn.title = 'Archive';
+          archiveBtn.textContent = '📥';
+          archiveBtn.className =
+            'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+          archiveBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Optimistically update the cache
+            try {
+              const CACHE_KEY = 'cached-projects-list';
+              const cached = await new Promise((resolve) =>
+                chrome.storage.local.get(CACHE_KEY, (r) => resolve(r)),
+              );
+              if (cached && Array.isArray(cached[CACHE_KEY])) {
+                const updatedItems = cached[CACHE_KEY].filter(
+                  (item) => item.id !== it.id,
+                );
+                await new Promise((resolve) =>
+                  chrome.storage.local.set({ [CACHE_KEY]: updatedItems }, () =>
+                    resolve(),
+                  ),
+                );
+              }
+            } catch (_) {
+              // Ignore cache update errors
+            }
+
+            disableAllButtons();
+            setStatus('Archiving…');
+            await sendCommand('archiveProject', { id: it.id });
+            window.close();
+          });
+
           const deleteBtn = document.createElement('button');
           deleteBtn.type = 'button';
           deleteBtn.title = 'Delete';
@@ -388,6 +424,7 @@
             deleteBtn.disabled = true;
             replaceWithHighlightedBtn.disabled = true;
             replaceWithWindowBtn.disabled = true;
+            archiveBtn.disabled = true;
             li.classList.add('opacity-60');
           }
 
@@ -395,6 +432,7 @@
           right.appendChild(addBtn);
           right.appendChild(replaceWithHighlightedBtn);
           right.appendChild(replaceWithWindowBtn);
+          right.appendChild(archiveBtn);
           right.appendChild(deleteBtn);
           rightContainer.appendChild(right);
 

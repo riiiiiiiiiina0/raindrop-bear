@@ -57,6 +57,7 @@ import {
   replaceSavedProjectWithTabs,
   addTabsToProject,
   renameSavedProjectsGroup,
+  archiveProject,
 } from './modules/projects.js';
 
 const ALARM_NAME = 'raindrop-sync';
@@ -799,6 +800,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: true });
         return;
       }
+      if (message && message.type === 'archiveProject') {
+        const id = message && message.id;
+        await archiveProject(id);
+        sendResponse({ ok: true });
+        return;
+      }
       if (
         message &&
         message.type === 'saveCurrentOrHighlightedTabsToRaindrop'
@@ -884,6 +891,20 @@ chrome.notifications?.onClicked.addListener((notificationId) => {
     try {
       chrome.runtime.openOptionsPage();
     } catch (_) {}
+    try {
+      chrome.notifications.clear(notificationId);
+    } catch (_) {}
+  } else if (String(notificationId).startsWith('project-archived-')) {
+    const collectionId = String(notificationId).substring(
+      'project-archived-'.length,
+    );
+    if (collectionId) {
+      try {
+        chrome.tabs?.create({
+          url: `https://app.raindrop.io/my/${collectionId}`,
+        });
+      } catch (_) {}
+    }
     try {
       chrome.notifications.clear(notificationId);
     } catch (_) {}
