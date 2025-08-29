@@ -321,6 +321,27 @@
           archiveBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
+
+            // Optimistically update the cache
+            try {
+              const CACHE_KEY = 'cached-projects-list';
+              const cached = await new Promise((resolve) =>
+                chrome.storage.local.get(CACHE_KEY, (r) => resolve(r)),
+              );
+              if (cached && Array.isArray(cached[CACHE_KEY])) {
+                const updatedItems = cached[CACHE_KEY].filter(
+                  (item) => item.id !== it.id,
+                );
+                await new Promise((resolve) =>
+                  chrome.storage.local.set({ [CACHE_KEY]: updatedItems }, () =>
+                    resolve(),
+                  ),
+                );
+              }
+            } catch (_) {
+              // Ignore cache update errors
+            }
+
             disableAllButtons();
             setStatus('Archiving…');
             await sendCommand('archiveProject', { id: it.id });
