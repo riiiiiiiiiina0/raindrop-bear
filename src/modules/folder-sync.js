@@ -24,7 +24,7 @@ export async function syncFolders(groups, collectionsById, state) {
   const groupMap = { ...(state.groupMap || {}) };
   const collectionMap = { ...(state.collectionMap || {}) };
   let didChange = false;
-  const SAVED_PROJECTS_TITLE = 'Saved Projects';
+  const SAVED_PROJECTS_TITLE = '🐻‍❄️ Projects';
 
   const currentGroupTitles = new Set();
 

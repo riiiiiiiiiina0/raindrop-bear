@@ -56,6 +56,7 @@ import {
   saveWindowAsProject,
   replaceSavedProjectWithTabs,
   addTabsToProject,
+  renameSavedProjectsGroup,
 } from './modules/projects.js';
 
 const ALARM_NAME = 'raindrop-sync';
@@ -112,7 +113,7 @@ async function performSync() {
     state = updatedState;
     const { groups, rootCollections, childCollections } =
       await fetchGroupsAndCollections();
-    const SAVED_PROJECTS_TITLE = 'Saved Projects';
+    const SAVED_PROJECTS_TITLE = '🐻‍❄️ Projects';
     const filteredGroups = (groups || []).filter(
       (g) => (g && g.title) !== SAVED_PROJECTS_TITLE,
     );
@@ -268,6 +269,20 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   const isUpdate = details.reason === 'update';
   const [major, minor, patch] =
     details.previousVersion?.split('.').map(Number) || [];
+
+  if (isUpdate) {
+    const prevVersion = details.previousVersion;
+    if (prevVersion) {
+      const [major, minor, patch] = prevVersion.split('.').map(Number);
+      if (major < 1 || (major === 1 && minor < 82)) {
+        try {
+          renameSavedProjectsGroup();
+        } catch (e) {
+          console.error('Failed to rename saved projects group', e);
+        }
+      }
+    }
+  }
   const shouldShowUpdateNote = isUpdate && major === 1 && minor < 53;
 
   // show update note on update

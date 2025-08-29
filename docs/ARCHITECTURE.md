@@ -8,7 +8,7 @@ At a high level, the extension:
 
 - Periodically synchronizes Raindrop collections and items to Chrome bookmarks
 - Mirrors local bookmark changes back to Raindrop (behind a guard, currently seems to have bug that causes lots of duplication on raindrop)
-- Provides “Saved Projects” features (save/recover/delete), and an optional live window-to-project sync
+- Provides “Projects” features (save/recover/delete), and an optional live window-to-project sync
 
 The background service worker orchestrates events, timers, and message routing; feature modules implement domain logic.
 
@@ -115,13 +115,13 @@ flowchart TD
 
 - `src/modules/window-sync.js`
 
-  - Live “window → Saved Project” sync sessions:
+  - Live “window → Project” sync sessions:
     - Session registry, persistence, scheduling via alarms
     - Build items from tabs, override collection contents, and update UI
 
 - `src/modules/projects.js`
 
-  - Saved Projects features:
+  - Projects features:
     - List projects in order
     - Save current/highlighted tabs to Unsorted
     - Save highlighted tabs as a new project
@@ -161,7 +161,7 @@ sequenceDiagram
   BG->>BG: set badge ✔️/😵, restore UI
 ```
 
-### Window Sync (Saved Projects)
+### Window Sync (Projects)
 
 ```mermaid
 stateDiagram-v2

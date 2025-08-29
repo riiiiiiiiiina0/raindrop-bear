@@ -20,6 +20,27 @@ import {
 import { chromeP } from './chrome.js';
 import { notifyUnsortedSave } from './notifications.js';
 
+export async function renameSavedProjectsGroup() {
+  try {
+    const userRes = await apiGET('/user');
+    const groups =
+      userRes && userRes.user && Array.isArray(userRes.user.groups)
+        ? userRes.user.groups
+        : [];
+    const oldName = 'Saved Projects';
+    const newName = '🐻‍❄️ Projects';
+    const idx = groups.findIndex((g) => g && g.title === oldName);
+    if (idx === -1) {
+      return; // No group with the old name found
+    }
+    const newGroups = groups.slice();
+    newGroups[idx].title = newName;
+    await apiPUT('/user', { groups: newGroups });
+  } catch (error) {
+    console.error('Failed to rename "Saved Projects" group:', error);
+  }
+}
+
 export async function listSavedProjects() {
   const [userRes, rootsRes] = await Promise.all([
     apiGET('/user'),
@@ -29,7 +50,7 @@ export async function listSavedProjects() {
     userRes && userRes.user && Array.isArray(userRes.user.groups)
       ? userRes.user.groups
       : [];
-  const saved = groups.find((g) => (g && g.title) === 'Saved Projects');
+  const saved = groups.find((g) => (g && g.title) === '🐻‍❄️ Projects');
   const order =
     saved && Array.isArray(saved.collections) ? saved.collections : [];
   const rootCollections = Array.isArray(rootsRes?.items) ? rootsRes.items : [];
@@ -254,11 +275,11 @@ export async function deleteSavedProject(chromeP, collectionId) {
     const groups = Array.isArray(userRes?.user?.groups)
       ? userRes.user.groups
       : [];
-    const idx = groups.findIndex((g) => (g && g.title) === 'Saved Projects');
+    const idx = groups.findIndex((g) => (g && g.title) === '🐻‍❄️ Projects');
     if (idx >= 0) {
       const newGroups = groups.slice();
       const entry = {
-        ...(newGroups[idx] || { title: 'Saved Projects', collections: [] }),
+        ...(newGroups[idx] || { title: '🐻‍❄️ Projects', collections: [] }),
       };
       const cols = Array.isArray(entry.collections)
         ? entry.collections.slice()
@@ -470,7 +491,7 @@ export async function saveTabsListAsProject(chrome, name, tabsList) {
       userRes && userRes.user && Array.isArray(userRes.user.groups)
         ? userRes.user.groups
         : [];
-    const savedProjectsTitle = 'Saved Projects';
+    const savedProjectsTitle = '🐻‍❄️ Projects';
     let groupsArray = groups.slice();
     let groupIndex = groupsArray.findIndex(
       (g) => (g.title || '') === savedProjectsTitle,
@@ -606,7 +627,7 @@ export async function replaceSavedProjectWithTabs(
   const groups = Array.isArray(userRes?.user?.groups)
     ? userRes.user.groups
     : [];
-  const savedIdx = groups.findIndex((g) => (g && g.title) === 'Saved Projects');
+  const savedIdx = groups.findIndex((g) => (g && g.title) === '🐻‍❄️ Projects');
   const savedGroup = savedIdx >= 0 ? groups[savedIdx] : null;
   const order = Array.isArray(savedGroup?.collections)
     ? savedGroup.collections.slice()
@@ -636,7 +657,7 @@ export async function replaceSavedProjectWithTabs(
       const newGroups = groups.slice();
       const entry = {
         ...(newGroups[savedIdx] || {
-          title: 'Saved Projects',
+          title: '🐻‍❄️ Projects',
           collections: [],
         }),
       };

@@ -135,7 +135,7 @@ export async function createCollectionUnderSavedProjects(title) {
   const groups = Array.isArray(userRes?.user?.groups)
     ? userRes.user.groups
     : [];
-  const savedTitle = 'Saved Projects';
+  const savedTitle = '🐻‍❄️ Projects';
   let groupsArray = groups.slice();
   let idx = groupsArray.findIndex((g) => (g && g.title) === savedTitle);
   if (idx === -1) {
