@@ -41,6 +41,57 @@ export async function renameSavedProjectsGroup() {
   }
 }
 
+export async function archiveProject(collectionId) {
+  const colId = Number(collectionId);
+  if (!Number.isFinite(colId)) return;
+
+  setBadge('📥', '#3b82f6');
+
+  try {
+    const userRes = await apiGET('/user');
+    const groups =
+      userRes && userRes.user && Array.isArray(userRes.user.groups)
+        ? userRes.user.groups
+        : [];
+
+    const projectsGroupTitle = '🐻‍❄️ Projects';
+    const archivedGroupTitle = '🐻‍❄️ Archived Projects';
+
+    let newGroups = JSON.parse(JSON.stringify(groups));
+
+    let projectsGroup = newGroups.find((g) => g.title === projectsGroupTitle);
+    if (projectsGroup) {
+      projectsGroup.collections = (projectsGroup.collections || []).filter(
+        (id) => Number(id) !== colId,
+      );
+    }
+
+    let archivedGroup = newGroups.find((g) => g.title === archivedGroupTitle);
+    if (!archivedGroup) {
+      newGroups.push({
+        title: archivedGroupTitle,
+        hidden: false,
+        sort: newGroups.length,
+        collections: [colId],
+      });
+    } else {
+      if (!archivedGroup.collections.includes(colId)) {
+        archivedGroup.collections.unshift(colId);
+      }
+    }
+
+    await apiPUT('/user', { groups: newGroups });
+
+    setBadge('✔️', '#22c55e');
+    scheduleClearBadge(3000);
+    notify(`Project archived successfully.`);
+  } catch (e) {
+    setBadge('😵', '#ef4444');
+    scheduleClearBadge(3000);
+    notify(`Failed to archive project: ${e}`);
+  }
+}
+
 export async function listSavedProjects() {
   const [userRes, rootsRes] = await Promise.all([
     apiGET('/user'),

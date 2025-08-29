@@ -312,6 +312,21 @@
             window.close();
           });
 
+          const archiveBtn = document.createElement('button');
+          archiveBtn.type = 'button';
+          archiveBtn.title = 'Archive';
+          archiveBtn.textContent = '📥';
+          archiveBtn.className =
+            'p-1 text-xs rounded bg-transparent transition-colors hover:bg-black cursor-pointer';
+          archiveBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            disableAllButtons();
+            setStatus('Archiving…');
+            await sendCommand('archiveProject', { id: it.id });
+            window.close();
+          });
+
           const deleteBtn = document.createElement('button');
           deleteBtn.type = 'button';
           deleteBtn.title = 'Delete';
@@ -388,6 +403,7 @@
             deleteBtn.disabled = true;
             replaceWithHighlightedBtn.disabled = true;
             replaceWithWindowBtn.disabled = true;
+            archiveBtn.disabled = true;
             li.classList.add('opacity-60');
           }
 
@@ -395,6 +411,7 @@
           right.appendChild(addBtn);
           right.appendChild(replaceWithHighlightedBtn);
           right.appendChild(replaceWithWindowBtn);
+          right.appendChild(archiveBtn);
           right.appendChild(deleteBtn);
           rightContainer.appendChild(right);
 

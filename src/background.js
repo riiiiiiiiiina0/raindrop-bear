@@ -57,6 +57,7 @@ import {
   replaceSavedProjectWithTabs,
   addTabsToProject,
   renameSavedProjectsGroup,
+  archiveProject,
 } from './modules/projects.js';
 
 const ALARM_NAME = 'raindrop-sync';
@@ -796,6 +797,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message && message.type === 'deleteSavedProject') {
         const id = message && message.id;
         await deleteSavedProject(chromeP, id);
+        sendResponse({ ok: true });
+        return;
+      }
+      if (message && message.type === 'archiveProject') {
+        const id = message && message.id;
+        await archiveProject(id);
         sendResponse({ ok: true });
         return;
       }
