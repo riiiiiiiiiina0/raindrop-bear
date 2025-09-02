@@ -52,6 +52,7 @@ A tiny helper with one cuddly purpose: **sync your Raindrop.io collections and b
 2. Paste your Raindrop API token
 
    - Find/generate: `https://app.raindrop.io/settings/integrations`
+   - Not sure how? see here: [How to Create Raindrop API Token](https://triiii.notion.site/How-to-Create-Raindrop-API-Token-2627aa7407c180619342c799d5377949)
 
 3. Save — your bookmarks will start syncing into the `Raindrop` folder ✨
 
