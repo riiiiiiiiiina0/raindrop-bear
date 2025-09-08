@@ -5,3 +5,7 @@ export function invertRecord(record) {
   }
   return inverted;
 }
+
+export function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
