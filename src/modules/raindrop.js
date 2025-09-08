@@ -1,4 +1,23 @@
 import { chromeP } from './chrome.js';
+import { sleep } from './utils.js';
+
+const MAX_RETRIES = 5;
+const INITIAL_BACKOFF_MS = 1000;
+
+async function fetchWithRetry(url, options) {
+  let retries = 0;
+  while (true) {
+    const res = await fetch(url, options);
+    if (res.status !== 429 || retries >= MAX_RETRIES) {
+      return res;
+    }
+
+    const backoffMs = INITIAL_BACKOFF_MS * 2 ** retries;
+    console.log(`Raindrop API rate limited. Retrying in ${backoffMs}ms...`);
+    await sleep(backoffMs);
+    retries++;
+  }
+}
 
 const RAINDROP_API_BASE = 'https://api.raindrop.io/rest/v1';
 let RAINDROP_API_TOKEN = '';
@@ -40,7 +59,7 @@ export async function apiGET(pathWithQuery) {
     pathWithQuery.startsWith('/') ? '' : '/'
   }${pathWithQuery}`;
   await loadTokenIfNeeded();
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${RAINDROP_API_TOKEN}`,
@@ -71,7 +90,7 @@ export async function apiGETText(pathWithQuery) {
     pathWithQuery.startsWith('/') ? '' : '/'
   }${pathWithQuery}`;
   await loadTokenIfNeeded();
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${RAINDROP_API_TOKEN}`,
@@ -100,7 +119,7 @@ export async function apiGETText(pathWithQuery) {
 export async function apiPOST(path, body) {
   const url = `${RAINDROP_API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
   await loadTokenIfNeeded();
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${RAINDROP_API_TOKEN}`,
@@ -131,7 +150,7 @@ export async function apiPOST(path, body) {
 export async function apiPUT(path, body) {
   const url = `${RAINDROP_API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
   await loadTokenIfNeeded();
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${RAINDROP_API_TOKEN}`,
@@ -161,7 +180,7 @@ export async function apiPUT(path, body) {
 export async function apiDELETE(path) {
   const url = `${RAINDROP_API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
   await loadTokenIfNeeded();
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${RAINDROP_API_TOKEN}`,
@@ -195,7 +214,7 @@ export async function apiDELETE(path) {
 export async function apiDELETEWithBody(path, body) {
   const url = `${RAINDROP_API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
   await loadTokenIfNeeded();
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${RAINDROP_API_TOKEN}`,
