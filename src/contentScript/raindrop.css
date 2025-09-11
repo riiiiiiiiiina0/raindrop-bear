@@ -1,0 +1,7 @@
+article[role='listitem'] {
+  picture[role='img'] {
+    img {
+      object-fit: contain;
+    }
+  }
+}

@@ -21,6 +21,16 @@
     "service_worker": "src/background.js",
     "type": "module"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://app.raindrop.io/my/*"
+      ],
+      "css": [
+        "src/contentScript/raindrop.css"
+      ]
+    }
+  ],
   "options_page": "src/options.html",
   "action": {
     "default_title": "Raindrop Bear",
