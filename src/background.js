@@ -1000,6 +1000,18 @@ chrome.notifications?.onClicked.addListener((notificationId) => {
   }
 });
 
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command === 'save-to-unsorted') {
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    if (tab) {
+      await saveUrlToUnsorted(tab.url, tab.title);
+    }
+  }
+});
+
 chrome.contextMenus?.onClicked.addListener(async (info, tab) => {
   const { menuItemId } = info;
   if (menuItemId === 'save-link') {
