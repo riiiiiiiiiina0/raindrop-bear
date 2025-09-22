@@ -243,6 +243,7 @@ async function performSync() {
 }
 
 async function saveUrlToUnsorted(url, title) {
+  setBadge('⬆️', '#f59e0b');
   try {
     const existing = await apiPOST('/import/url/exists', { urls: [url] });
 
