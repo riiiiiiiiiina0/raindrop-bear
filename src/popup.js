@@ -85,11 +85,7 @@
         ),
       );
       const arr = Array.isArray(tabs) ? tabs : [];
-      const eligible = arr.filter(
-        (t) =>
-          t.url &&
-          (t.url.startsWith('https://') || t.url.startsWith('http://')),
-      );
+      const eligible = arr.filter((t) => t.url);
       const targetTabs = eligible.length > 0 ? eligible : arr;
       if (targetTabs.length === 0) return '';
 

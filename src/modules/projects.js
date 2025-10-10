@@ -399,7 +399,7 @@ export async function saveCurrentOrHighlightedTabsToRaindrop(chrome, chromeP) {
           );
     for (const t of candidates) {
       const url = (t && t.url) || '';
-      if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
+      if (url) {
         titlesAndUrls.push({ title: (t && t.title) || url, url });
       }
     }
@@ -527,13 +527,39 @@ export async function saveWindowAsProject(chrome, name) {
   await saveTabsListAsProject(chrome, projectName, tabsList || []);
 }
 
+function isValidUrl(url) {
+  return (
+    url.startsWith('http://') ||
+    url.startsWith('https://') ||
+    url.includes('-extension://')
+  );
+}
+
+function replaceNonHttpOrHttpsUrl(url) {
+  if (url.includes('-extension://')) {
+    const params = new URLSearchParams();
+    params.set('url', url);
+    params.set('_', new Date().getTime().toString());
+    return `https://riiiiiiiiiina0.github.io/raindrop-bear/redirect.html?${params.toString()}`;
+  }
+
+  return url;
+}
+
 export async function saveTabsListAsProject(chrome, name, tabsList) {
   setBadge('💾', '#a855f7');
   try {
-    const eligibleTabs = (tabsList || []).filter(
-      (t) =>
-        t.url && (t.url.startsWith('https://') || t.url.startsWith('http://')),
-    );
+    const eligibleTabs = (tabsList || []).filter((t) => {
+      if (!t.url) return false;
+      const url = t.url;
+      // Allow http:// and https:// URLs
+      // Allow extension:// URLs (will be transformed later)
+      if (isValidUrl(url)) {
+        return true;
+      }
+      // Filter out other URLs
+      return false;
+    });
     if (!eligibleTabs.length) throw new Error('No eligible tabs');
     const groupsInWindow = await new Promise((resolve) =>
       chrome.tabGroups?.query(
@@ -554,7 +580,10 @@ export async function saveTabsListAsProject(chrome, name, tabsList) {
         tabGroup: group && group.title,
         tabGroupColor: group && group.color,
       };
-      return { link: t.url, title: baseTitle, note: JSON.stringify(meta) };
+
+      const url = replaceNonHttpOrHttpsUrl(t.url);
+
+      return { link: url, title: baseTitle, note: JSON.stringify(meta) };
     });
     const userRes = await apiGET('/user');
     const groups =
@@ -667,10 +696,9 @@ export async function replaceSavedProjectWithTabs(
   const oldId = Number(collectionId);
   if (!Number.isFinite(oldId)) return { title: 'Project', count: 0 };
   const eligibleTabs = (tabsList || []).filter(
-    (t) =>
-      t.url && (t.url.startsWith('https://') || t.url.startsWith('http://')),
+    (t) => t.url && isValidUrl(t.url),
   );
-  if (eligibleTabs.length === 0) throw new Error('No eligible http(s) tabs');
+  if (eligibleTabs.length === 0) throw new Error('No eligible tabs');
   const groupsInWindow = await new Promise((resolve) =>
     chrome.tabGroups?.query(
       { windowId: chrome.windows.WINDOW_ID_CURRENT },
@@ -688,7 +716,10 @@ export async function replaceSavedProjectWithTabs(
       tabGroup: group && group.title,
       tabGroupColor: group && group.color,
     };
-    return { link: t.url, title: baseTitle, note: JSON.stringify(meta) };
+
+    const url = replaceNonHttpOrHttpsUrl(t.url);
+
+    return { link: url, title: baseTitle, note: JSON.stringify(meta) };
   });
   const [userRes, rootsRes] = await Promise.all([
     apiGET('/user'),
@@ -798,10 +829,9 @@ export async function addTabsToProject(chrome, collectionId, tabsList) {
   if (!Number.isFinite(colId)) return { title: 'Project', count: 0 };
 
   const eligibleTabs = (tabsList || []).filter(
-    (t) =>
-      t.url && (t.url.startsWith('https://') || t.url.startsWith('http://')),
+    (t) => t.url && isValidUrl(t.url),
   );
-  if (eligibleTabs.length === 0) throw new Error('No eligible http(s) tabs');
+  if (eligibleTabs.length === 0) throw new Error('No eligible tabs');
 
   const groupsInWindow = await new Promise((resolve) =>
     chrome.tabGroups?.query(
@@ -866,7 +896,10 @@ export async function addTabsToProject(chrome, collectionId, tabsList) {
       meta.tabGroup = sharedTabGroupInfo?.tabGroup;
       meta.tabGroupColor = sharedTabGroupInfo?.tabGroupColor;
     }
-    return { link: t.url, title: baseTitle, note: JSON.stringify(meta) };
+
+    const url = replaceNonHttpOrHttpsUrl(t.url);
+
+    return { link: url, title: baseTitle, note: JSON.stringify(meta) };
   });
 
   try {
