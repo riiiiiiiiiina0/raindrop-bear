@@ -38,7 +38,7 @@
     // If it exists, redirect to it
     if (redirectUrl) {
       // To prevent open redirect vulnerabilities, you may want to check if redirectUrl is safe/trusted here
-      window.location.href = decodeURIComponent(redirectUrl);
+      window.location.href = redirectUrl;
     }
   </script>
 </body>
