@@ -568,9 +568,10 @@ export async function saveTabsListAsProject(chrome, name, tabsList) {
       // Transform URL if needed
       let url = t.url;
       if (url.includes('-extension://')) {
-        url = `https://riiiiiiiiiina0.github.io/raindrop-bear/redirect.html?url=${encodeURIComponent(
-          url,
-        )}`;
+        const params = new URLSearchParams();
+        params.set('url', url);
+        params.set('_', new Date().getTime().toString());
+        url = `https://riiiiiiiiiina0.github.io/raindrop-bear/redirect.html?${params.toString()}`;
       }
 
       return { link: url, title: baseTitle, note: JSON.stringify(meta) };
