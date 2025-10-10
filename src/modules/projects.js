@@ -527,6 +527,25 @@ export async function saveWindowAsProject(chrome, name) {
   await saveTabsListAsProject(chrome, projectName, tabsList || []);
 }
 
+function isValidUrl(url) {
+  return (
+    url.startsWith('http://') ||
+    url.startsWith('https://') ||
+    url.includes('-extension://')
+  );
+}
+
+function replaceNonHttpOrHttpsUrl(url) {
+  if (url.includes('-extension://')) {
+    const params = new URLSearchParams();
+    params.set('url', url);
+    params.set('_', new Date().getTime().toString());
+    return `https://riiiiiiiiiina0.github.io/raindrop-bear/redirect.html?${params.toString()}`;
+  }
+
+  return url;
+}
+
 export async function saveTabsListAsProject(chrome, name, tabsList) {
   setBadge('💾', '#a855f7');
   try {
@@ -534,11 +553,8 @@ export async function saveTabsListAsProject(chrome, name, tabsList) {
       if (!t.url) return false;
       const url = t.url;
       // Allow http:// and https:// URLs
-      if (url.startsWith('http://') || url.startsWith('https://')) {
-        return true;
-      }
       // Allow extension:// URLs (will be transformed later)
-      if (url.includes('-extension://')) {
+      if (isValidUrl(url)) {
         return true;
       }
       // Filter out other URLs
@@ -565,14 +581,7 @@ export async function saveTabsListAsProject(chrome, name, tabsList) {
         tabGroupColor: group && group.color,
       };
 
-      // Transform URL if needed
-      let url = t.url;
-      if (url.includes('-extension://')) {
-        const params = new URLSearchParams();
-        params.set('url', url);
-        params.set('_', new Date().getTime().toString());
-        url = `https://riiiiiiiiiina0.github.io/raindrop-bear/redirect.html?${params.toString()}`;
-      }
+      const url = replaceNonHttpOrHttpsUrl(t.url);
 
       return { link: url, title: baseTitle, note: JSON.stringify(meta) };
     });
@@ -686,7 +695,9 @@ export async function replaceSavedProjectWithTabs(
 ) {
   const oldId = Number(collectionId);
   if (!Number.isFinite(oldId)) return { title: 'Project', count: 0 };
-  const eligibleTabs = (tabsList || []).filter((t) => t.url);
+  const eligibleTabs = (tabsList || []).filter(
+    (t) => t.url && isValidUrl(t.url),
+  );
   if (eligibleTabs.length === 0) throw new Error('No eligible tabs');
   const groupsInWindow = await new Promise((resolve) =>
     chrome.tabGroups?.query(
@@ -705,7 +716,10 @@ export async function replaceSavedProjectWithTabs(
       tabGroup: group && group.title,
       tabGroupColor: group && group.color,
     };
-    return { link: t.url, title: baseTitle, note: JSON.stringify(meta) };
+
+    const url = replaceNonHttpOrHttpsUrl(t.url);
+
+    return { link: url, title: baseTitle, note: JSON.stringify(meta) };
   });
   const [userRes, rootsRes] = await Promise.all([
     apiGET('/user'),
@@ -814,7 +828,9 @@ export async function addTabsToProject(chrome, collectionId, tabsList) {
   const colId = Number(collectionId);
   if (!Number.isFinite(colId)) return { title: 'Project', count: 0 };
 
-  const eligibleTabs = (tabsList || []).filter((t) => t.url);
+  const eligibleTabs = (tabsList || []).filter(
+    (t) => t.url && isValidUrl(t.url),
+  );
   if (eligibleTabs.length === 0) throw new Error('No eligible tabs');
 
   const groupsInWindow = await new Promise((resolve) =>
@@ -880,7 +896,10 @@ export async function addTabsToProject(chrome, collectionId, tabsList) {
       meta.tabGroup = sharedTabGroupInfo?.tabGroup;
       meta.tabGroupColor = sharedTabGroupInfo?.tabGroupColor;
     }
-    return { link: t.url, title: baseTitle, note: JSON.stringify(meta) };
+
+    const url = replaceNonHttpOrHttpsUrl(t.url);
+
+    return { link: url, title: baseTitle, note: JSON.stringify(meta) };
   });
 
   try {
