@@ -182,6 +182,14 @@ export async function buildItemsFromWindowTabs(chrome, windowId) {
       resolve(ts || []),
     ),
   );
+
+  // Load custom tab titles from storage
+  const tabTitlesData = await new Promise((resolve) =>
+    chrome.storage.local.get('tabTitles', (data) =>
+      resolve(data.tabTitles || {}),
+    ),
+  );
+
   const groupsInWindow = await new Promise((resolve) =>
     chrome.tabGroups?.query({ windowId: Number(windowId) }, (gs) =>
       resolve(gs || []),
@@ -202,6 +210,13 @@ export async function buildItemsFromWindowTabs(chrome, windowId) {
       tabGroup: group && group.title,
       tabGroupColor: group && group.color,
     };
+
+    // Include custom title if it exists
+    const customTitleRecord = tabTitlesData[t.id];
+    if (customTitleRecord && customTitleRecord.title) {
+      meta.customTitle = customTitleRecord.title;
+    }
+
     return { link: t.url, title: baseTitle, note: JSON.stringify(meta) };
   });
 }

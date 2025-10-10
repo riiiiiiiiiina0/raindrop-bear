@@ -230,6 +230,14 @@ export async function recoverSavedProject(chrome, collectionId, options) {
       }
     }
     const first = sorted[0];
+
+    // Load custom tab titles cache for applying titles later
+    const tabTitlesData = await new Promise((resolve) =>
+      chrome.storage.local.get('tabTitles', (data) =>
+        resolve(data.tabTitles || {}),
+      ),
+    );
+
     // Determine whether to reuse current window (if it has one empty non-pinned tab)
     const isEmptyNewTabUrl = (u) => {
       const url = String(u || '').toLowerCase();
@@ -259,6 +267,19 @@ export async function recoverSavedProject(chrome, collectionId, options) {
           await chrome.tabs.update(activeTab.id, { pinned: true });
         } catch (_) {}
       }
+
+      // Apply custom title to first tab if it exists in metadata
+      if (activeTab && activeTab.id && first.meta?.customTitle) {
+        tabTitlesData[activeTab.id] = {
+          title: first.meta.customTitle,
+          url: first.url,
+        };
+        chrome.tabs.sendMessage(activeTab.id, {
+          type: 'set_custom_title',
+          title: first.meta.customTitle,
+        });
+      }
+
       targetWindowId = newWindow.id;
     } else {
       const currentWindow = await new Promise((resolve) => {
@@ -279,6 +300,18 @@ export async function recoverSavedProject(chrome, collectionId, options) {
           active: true,
         });
         activeTab = soleTab;
+
+        // Apply custom title to first tab if it exists in metadata
+        if (activeTab && activeTab.id && first.meta?.customTitle) {
+          tabTitlesData[activeTab.id] = {
+            title: first.meta.customTitle,
+            url: first.url,
+          };
+          chrome.tabs.sendMessage(activeTab.id, {
+            type: 'set_custom_title',
+            title: first.meta.customTitle,
+          });
+        }
       } else {
         // Otherwise, add all tabs to the current window
         tabsToCreate = sorted;
@@ -300,6 +333,16 @@ export async function recoverSavedProject(chrome, collectionId, options) {
         windowId: targetWindowId,
         pinned: it.meta?.pinned ?? false,
       });
+
+      // Apply custom title if it exists in metadata
+      if (newTab && newTab.id && it.meta?.customTitle) {
+        tabTitlesData[newTab.id] = { title: it.meta.customTitle, url: it.url };
+        chrome.tabs.sendMessage(newTab.id, {
+          type: 'set_custom_title',
+          title: it.meta.customTitle,
+        });
+      }
+
       if (newTab && newTab.id && it.meta?.tabGroup !== null) {
         let group = tabGroups.find(
           (g) => g.meta.tabGroup === it.meta?.tabGroup,
@@ -328,6 +371,9 @@ export async function recoverSavedProject(chrome, collectionId, options) {
         }
       }
     }
+
+    // Save updated tab titles cache to storage
+    chrome.storage.local.set({ tabTitles: tabTitlesData });
   } catch (e) {
     console.error('Failed to parse export.html', e);
   }
@@ -561,6 +607,14 @@ export async function saveTabsListAsProject(chrome, name, tabsList) {
       return false;
     });
     if (!eligibleTabs.length) throw new Error('No eligible tabs');
+
+    // Load custom tab titles from storage
+    const tabTitlesData = await new Promise((resolve) =>
+      chrome.storage.local.get('tabTitles', (data) =>
+        resolve(data.tabTitles || {}),
+      ),
+    );
+
     const groupsInWindow = await new Promise((resolve) =>
       chrome.tabGroups?.query(
         { windowId: chrome.windows.WINDOW_ID_CURRENT },
@@ -580,6 +634,12 @@ export async function saveTabsListAsProject(chrome, name, tabsList) {
         tabGroup: group && group.title,
         tabGroupColor: group && group.color,
       };
+
+      // Include custom title if it exists
+      const customTitleRecord = tabTitlesData[t.id];
+      if (customTitleRecord && customTitleRecord.title) {
+        meta.customTitle = customTitleRecord.title;
+      }
 
       const url = replaceNonHttpOrHttpsUrl(t.url);
 
@@ -699,6 +759,14 @@ export async function replaceSavedProjectWithTabs(
     (t) => t.url && isValidUrl(t.url),
   );
   if (eligibleTabs.length === 0) throw new Error('No eligible tabs');
+
+  // Load custom tab titles from storage
+  const tabTitlesData = await new Promise((resolve) =>
+    chrome.storage.local.get('tabTitles', (data) =>
+      resolve(data.tabTitles || {}),
+    ),
+  );
+
   const groupsInWindow = await new Promise((resolve) =>
     chrome.tabGroups?.query(
       { windowId: chrome.windows.WINDOW_ID_CURRENT },
@@ -716,6 +784,12 @@ export async function replaceSavedProjectWithTabs(
       tabGroup: group && group.title,
       tabGroupColor: group && group.color,
     };
+
+    // Include custom title if it exists
+    const customTitleRecord = tabTitlesData[t.id];
+    if (customTitleRecord && customTitleRecord.title) {
+      meta.customTitle = customTitleRecord.title;
+    }
 
     const url = replaceNonHttpOrHttpsUrl(t.url);
 
@@ -833,6 +907,13 @@ export async function addTabsToProject(chrome, collectionId, tabsList) {
   );
   if (eligibleTabs.length === 0) throw new Error('No eligible tabs');
 
+  // Load custom tab titles from storage
+  const tabTitlesData = await new Promise((resolve) =>
+    chrome.storage.local.get('tabTitles', (data) =>
+      resolve(data.tabTitles || {}),
+    ),
+  );
+
   const groupsInWindow = await new Promise((resolve) =>
     chrome.tabGroups?.query(
       { windowId: chrome.windows.WINDOW_ID_CURRENT },
@@ -895,6 +976,12 @@ export async function addTabsToProject(chrome, collectionId, tabsList) {
     if (shouldAssignGroup) {
       meta.tabGroup = sharedTabGroupInfo?.tabGroup;
       meta.tabGroupColor = sharedTabGroupInfo?.tabGroupColor;
+    }
+
+    // Include custom title if it exists
+    const customTitleRecord = tabTitlesData[t.id];
+    if (customTitleRecord && customTitleRecord.title) {
+      meta.customTitle = customTitleRecord.title;
     }
 
     const url = replaceNonHttpOrHttpsUrl(t.url);
