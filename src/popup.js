@@ -2,6 +2,9 @@
   const syncBtn = /** @type {HTMLButtonElement|null} */ (
     document.getElementById('sync-btn')
   );
+  const renameTabBtn = /** @type {HTMLButtonElement|null} */ (
+    document.getElementById('rename-tab-btn')
+  );
   const saveBtn = /** @type {HTMLButtonElement|null} */ (
     document.getElementById('save-btn')
   );
@@ -32,6 +35,7 @@
 
   if (
     !(syncBtn instanceof HTMLButtonElement) ||
+    !(renameTabBtn instanceof HTMLButtonElement) ||
     !(saveBtn instanceof HTMLButtonElement) ||
     !(saveClipboardBtn instanceof HTMLButtonElement) ||
     !(saveProjectBtn instanceof HTMLButtonElement) ||
@@ -515,6 +519,13 @@
     await sendCommand('saveCurrentOrHighlightedTabsToRaindrop');
     setStatus('');
     saveBtn.disabled = false;
+    window.close();
+  });
+
+  renameTabBtn.addEventListener('click', async () => {
+    renameTabBtn.disabled = true;
+    await sendCommand('rename-tab');
+    renameTabBtn.disabled = false;
     window.close();
   });
 

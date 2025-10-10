@@ -30,6 +30,15 @@
       "css": [
         "src/contentScript/raindrop.css"
       ]
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/contentScript/tab-title.js"
+      ],
+      "run_at": "document_start"
     }
   ],
   "options_page": "src/options.html",
@@ -49,6 +58,12 @@
         "default": "Ctrl+Shift+R"
       },
       "description": "Save current page to Unsorted"
+    },
+    "rename-tab": {
+      "suggested_key": {
+        "default": "Alt+T"
+      },
+      "description": "Rename current tab"
     }
   }
 }
