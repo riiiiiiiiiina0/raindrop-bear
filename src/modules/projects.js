@@ -530,7 +530,20 @@ export async function saveWindowAsProject(chrome, name) {
 export async function saveTabsListAsProject(chrome, name, tabsList) {
   setBadge('💾', '#a855f7');
   try {
-    const eligibleTabs = (tabsList || []).filter((t) => t.url);
+    const eligibleTabs = (tabsList || []).filter((t) => {
+      if (!t.url) return false;
+      const url = t.url;
+      // Allow http:// and https:// URLs
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        return true;
+      }
+      // Allow extension:// URLs (will be transformed later)
+      if (url.includes('-extension://')) {
+        return true;
+      }
+      // Filter out other URLs
+      return false;
+    });
     if (!eligibleTabs.length) throw new Error('No eligible tabs');
     const groupsInWindow = await new Promise((resolve) =>
       chrome.tabGroups?.query(
@@ -551,7 +564,16 @@ export async function saveTabsListAsProject(chrome, name, tabsList) {
         tabGroup: group && group.title,
         tabGroupColor: group && group.color,
       };
-      return { link: t.url, title: baseTitle, note: JSON.stringify(meta) };
+
+      // Transform URL if needed
+      let url = t.url;
+      if (url.includes('-extension://')) {
+        url = `https://riiiiiiiiiina0.github.io/raindrop-bear/redirect.html?url=${encodeURIComponent(
+          url,
+        )}`;
+      }
+
+      return { link: url, title: baseTitle, note: JSON.stringify(meta) };
     });
     const userRes = await apiGET('/user');
     const groups =
