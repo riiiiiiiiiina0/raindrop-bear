@@ -399,7 +399,7 @@ export async function saveCurrentOrHighlightedTabsToRaindrop(chrome, chromeP) {
           );
     for (const t of candidates) {
       const url = (t && t.url) || '';
-      if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
+      if (url) {
         titlesAndUrls.push({ title: (t && t.title) || url, url });
       }
     }
@@ -530,10 +530,7 @@ export async function saveWindowAsProject(chrome, name) {
 export async function saveTabsListAsProject(chrome, name, tabsList) {
   setBadge('💾', '#a855f7');
   try {
-    const eligibleTabs = (tabsList || []).filter(
-      (t) =>
-        t.url && (t.url.startsWith('https://') || t.url.startsWith('http://')),
-    );
+    const eligibleTabs = (tabsList || []).filter((t) => t.url);
     if (!eligibleTabs.length) throw new Error('No eligible tabs');
     const groupsInWindow = await new Promise((resolve) =>
       chrome.tabGroups?.query(
@@ -666,11 +663,8 @@ export async function replaceSavedProjectWithTabs(
 ) {
   const oldId = Number(collectionId);
   if (!Number.isFinite(oldId)) return { title: 'Project', count: 0 };
-  const eligibleTabs = (tabsList || []).filter(
-    (t) =>
-      t.url && (t.url.startsWith('https://') || t.url.startsWith('http://')),
-  );
-  if (eligibleTabs.length === 0) throw new Error('No eligible http(s) tabs');
+  const eligibleTabs = (tabsList || []).filter((t) => t.url);
+  if (eligibleTabs.length === 0) throw new Error('No eligible tabs');
   const groupsInWindow = await new Promise((resolve) =>
     chrome.tabGroups?.query(
       { windowId: chrome.windows.WINDOW_ID_CURRENT },
@@ -797,11 +791,8 @@ export async function addTabsToProject(chrome, collectionId, tabsList) {
   const colId = Number(collectionId);
   if (!Number.isFinite(colId)) return { title: 'Project', count: 0 };
 
-  const eligibleTabs = (tabsList || []).filter(
-    (t) =>
-      t.url && (t.url.startsWith('https://') || t.url.startsWith('http://')),
-  );
-  if (eligibleTabs.length === 0) throw new Error('No eligible http(s) tabs');
+  const eligibleTabs = (tabsList || []).filter((t) => t.url);
+  if (eligibleTabs.length === 0) throw new Error('No eligible tabs');
 
   const groupsInWindow = await new Promise((resolve) =>
     chrome.tabGroups?.query(
