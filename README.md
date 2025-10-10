@@ -1,4 +1,4 @@
-# 🐻‍❄️💧 Raindrop Bear
+# 🐻‍❄️💦 Raindrop Bear
 
 A tiny helper with one cuddly purpose: **sync your Raindrop.io collections and bookmarks into your browser’s bookmarks — across devices**. No fuss, no feature soup. Just your cloud bookmarks, happily living in your Bookmarks Bar. Rawr!
 
