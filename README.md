@@ -2,7 +2,8 @@
 
 A tiny helper with one cuddly purpose: **sync your Raindrop.io collections and bookmarks into your browser’s bookmarks — across devices**. No fuss, no feature soup. Just your cloud bookmarks, happily living in your Bookmarks Bar. Rawr!
 
-![Poster](./docs/poster.jpeg)
+![](./docs/raindrop_bear_1_raw_1280x800_text_1.png)
+![](./docs/raindrop_bear_3_raw_1280x800_text_1.png)
 
 <a href="https://buymeacoffee.com/riiiiiiiiiina" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-blue.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
