@@ -274,10 +274,6 @@ export async function recoverSavedProject(chrome, collectionId, options) {
           title: first.meta.customTitle,
           url: first.url,
         };
-        chrome.tabs.sendMessage(activeTab.id, {
-          type: 'set_custom_title',
-          title: first.meta.customTitle,
-        });
       }
 
       targetWindowId = newWindow.id;
@@ -307,10 +303,6 @@ export async function recoverSavedProject(chrome, collectionId, options) {
             title: first.meta.customTitle,
             url: first.url,
           };
-          chrome.tabs.sendMessage(activeTab.id, {
-            type: 'set_custom_title',
-            title: first.meta.customTitle,
-          });
         }
       } else {
         // Otherwise, add all tabs to the current window
@@ -337,10 +329,6 @@ export async function recoverSavedProject(chrome, collectionId, options) {
       // Apply custom title if it exists in metadata
       if (newTab && newTab.id && it.meta?.customTitle) {
         tabTitlesData[newTab.id] = { title: it.meta.customTitle, url: it.url };
-        chrome.tabs.sendMessage(newTab.id, {
-          type: 'set_custom_title',
-          title: it.meta.customTitle,
-        });
       }
 
       if (newTab && newTab.id && it.meta?.tabGroup !== null) {

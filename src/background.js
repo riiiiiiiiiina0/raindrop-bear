@@ -1113,7 +1113,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.storage?.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes && changes.raindropApiToken) {
+  if (area !== 'local') return;
+
+  // Handle API token changes
+  if (changes.raindropApiToken) {
     const newToken = (changes.raindropApiToken.newValue || '').trim();
     const oldToken = (changes.raindropApiToken.oldValue || '').trim();
     setFacadeToken(newToken);
@@ -1122,6 +1125,27 @@ chrome.storage?.onChanged.addListener((changes, area) => {
         performSync();
       } catch (_) {}
     }
+  }
+
+  // Handle tab title changes
+  if (changes.tabTitles) {
+    const newTitles = changes.tabTitles.newValue || {};
+    const oldTitles = changes.tabTitles.oldValue || {};
+    tabTitlesCache = newTitles; // Update in-memory cache
+
+    // Find which tab IDs have new or changed titles
+    const changedTabIds = Object.keys(newTitles).filter(
+      (id) =>
+        !oldTitles[id] || newTitles[id].title !== oldTitles[id].title,
+    );
+
+    // Apply the title to each changed tab
+    changedTabIds.forEach((tabId) => {
+      const tabIdNum = parseInt(tabId, 10);
+      if (!isNaN(tabIdNum) && newTitles[tabId]) {
+        applyTitleWithRetry(tabIdNum, newTitles[tabId].title, 5, 300);
+      }
+    });
   }
 });
 
