@@ -231,13 +231,6 @@ export async function recoverSavedProject(chrome, collectionId, options) {
     }
     const first = sorted[0];
 
-    // Load custom tab titles cache for applying titles later
-    const tabTitlesData = await new Promise((resolve) =>
-      chrome.storage.local.get('tabTitles', (data) =>
-        resolve(data.tabTitles || {}),
-      ),
-    );
-
     // Determine whether to reuse current window (if it has one empty non-pinned tab)
     const isEmptyNewTabUrl = (u) => {
       const url = String(u || '').toLowerCase();
@@ -268,18 +261,6 @@ export async function recoverSavedProject(chrome, collectionId, options) {
         } catch (_) {}
       }
 
-      // Apply custom title to first tab if it exists in metadata
-      if (activeTab && activeTab.id && first.meta?.customTitle) {
-        tabTitlesData[activeTab.id] = {
-          title: first.meta.customTitle,
-          url: first.url,
-        };
-        chrome.tabs.sendMessage(activeTab.id, {
-          type: 'set_custom_title',
-          title: first.meta.customTitle,
-        });
-      }
-
       targetWindowId = newWindow.id;
     } else {
       const currentWindow = await new Promise((resolve) => {
@@ -300,24 +281,15 @@ export async function recoverSavedProject(chrome, collectionId, options) {
           active: true,
         });
         activeTab = soleTab;
-
-        // Apply custom title to first tab if it exists in metadata
-        if (activeTab && activeTab.id && first.meta?.customTitle) {
-          tabTitlesData[activeTab.id] = {
-            title: first.meta.customTitle,
-            url: first.url,
-          };
-          chrome.tabs.sendMessage(activeTab.id, {
-            type: 'set_custom_title',
-            title: first.meta.customTitle,
-          });
-        }
       } else {
         // Otherwise, add all tabs to the current window
         tabsToCreate = sorted;
       }
     }
     const tabGroups = [];
+    const customTitlesToSet = {}; // Collect custom titles to save to storage
+
+    // Add first tab to groups if needed
     if (activeTab && activeTab.id && first.meta?.tabGroup) {
       tabGroups.push({
         meta: {
@@ -327,6 +299,15 @@ export async function recoverSavedProject(chrome, collectionId, options) {
         tabIds: [activeTab.id],
       });
     }
+
+    // Store custom title for first tab if it exists
+    if (activeTab && activeTab.id && first.meta?.customTitle) {
+      customTitlesToSet[activeTab.id] = {
+        title: first.meta.customTitle,
+        url: first.url,
+      };
+    }
+
     for (const it of tabsToCreate) {
       const newTab = await chrome.tabs.create({
         url: it.url,
@@ -334,13 +315,12 @@ export async function recoverSavedProject(chrome, collectionId, options) {
         pinned: it.meta?.pinned ?? false,
       });
 
-      // Apply custom title if it exists in metadata
+      // Store custom title if it exists in metadata
       if (newTab && newTab.id && it.meta?.customTitle) {
-        tabTitlesData[newTab.id] = { title: it.meta.customTitle, url: it.url };
-        chrome.tabs.sendMessage(newTab.id, {
-          type: 'set_custom_title',
+        customTitlesToSet[newTab.id] = {
           title: it.meta.customTitle,
-        });
+          url: it.url,
+        };
       }
 
       if (newTab && newTab.id && it.meta?.tabGroup !== null) {
@@ -360,6 +340,7 @@ export async function recoverSavedProject(chrome, collectionId, options) {
         group.tabIds.push(newTab.id);
       }
     }
+
     for (const group of tabGroups) {
       if (group.tabIds.length > 0) {
         const tg = await chrome.tabs.group({ tabIds: group.tabIds });
@@ -372,8 +353,37 @@ export async function recoverSavedProject(chrome, collectionId, options) {
       }
     }
 
-    // Save updated tab titles cache to storage
-    chrome.storage.local.set({ tabTitles: tabTitlesData });
+    // Save all custom titles to storage at once
+    // This allows the background script's tab monitoring to apply them with retry logic
+    if (Object.keys(customTitlesToSet).length > 0) {
+      console.log(
+        `Restoring ${
+          Object.keys(customTitlesToSet).length
+        } custom tab titles from project`,
+      );
+      // Load existing titles and merge with new ones
+      const existingTitles = await new Promise((resolve) =>
+        chrome.storage.local.get('tabTitles', (data) =>
+          resolve(data.tabTitles || {}),
+        ),
+      );
+      const mergedTitles = { ...existingTitles, ...customTitlesToSet };
+      await chrome.storage.local.set({ tabTitles: mergedTitles });
+
+      // Small delay to ensure storage is fully propagated
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Send a message to background script to trigger immediate application
+      // with retry logic for each tab
+      for (const [tabId, titleData] of Object.entries(customTitlesToSet)) {
+        chrome.runtime.sendMessage({
+          type: 'apply_custom_title',
+          tabId: Number(tabId),
+          title: titleData.title,
+          url: titleData.url,
+        });
+      }
+    }
   } catch (e) {
     console.error('Failed to parse export.html', e);
   }

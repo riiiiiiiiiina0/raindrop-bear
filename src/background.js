@@ -1105,6 +1105,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         return;
       }
+      // Handle apply_custom_title from projects.js when recovering projects
+      if (message && message.type === 'apply_custom_title') {
+        const { tabId, title, url } = message;
+        if (typeof tabId === 'number' && title) {
+          // Reload cache from storage to get the latest data
+          await loadTitlesToCache();
+          const cacheHasTitle = tabTitlesCache[tabId] !== undefined;
+          console.log(
+            `apply_custom_title: tab ${tabId}, title "${title}", cache has it: ${cacheHasTitle}, cache size: ${
+              Object.keys(tabTitlesCache).length
+            }`,
+          );
+          // Apply with retry logic
+          applyTitleWithRetry(tabId, title, 5, 500);
+        }
+        sendResponse({ ok: true });
+        return;
+      }
     } catch (_) {
       sendResponse({ ok: false });
     }
@@ -1298,12 +1316,33 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   }
   const customTitleRecord = tabTitlesCache[tabId];
   if (!customTitleRecord) {
-    return; // This tab doesn't have a custom title, so we don't care about it.
+    // Check if this tab should have a title but cache doesn't have it yet
+    if (changeInfo.status === 'complete') {
+      // Reload cache and check again as a safety measure
+      await loadTitlesToCache();
+      const reloadedRecord = tabTitlesCache[tabId];
+      if (!reloadedRecord) {
+        return; // This tab doesn't have a custom title
+      }
+      // Continue with the reloaded record
+      const applyTitle = () => {
+        console.log(
+          `onUpdated (after cache reload): applying title "${reloadedRecord.title}" to tab ${tabId}`,
+        );
+        applyTitleWithRetry(tabId, reloadedRecord.title, 5, 500);
+      };
+      applyTitle();
+      return;
+    }
+    return; // This tab doesn't have a custom title
   }
 
   // Helper function to apply the title with retry logic
   const applyTitle = () => {
-    applyTitleWithRetry(tabId, customTitleRecord.title, 2, 500); // Fewer retries for tab updates
+    console.log(
+      `onUpdated trigger: applying title "${customTitleRecord.title}" to tab ${tabId} (status: ${changeInfo.status})`,
+    );
+    applyTitleWithRetry(tabId, customTitleRecord.title, 5, 500); // Increased retries
   };
 
   // --- Trigger title application at multiple points for robustness ---
