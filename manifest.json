@@ -65,5 +65,11 @@
       },
       "description": "Rename current tab"
     }
+  },
+  "externally_connectable": {
+    "matches": [
+      "http://localhost:3030/*",
+      "https://ohauth.vercel.app/*"
+    ]
   }
 }

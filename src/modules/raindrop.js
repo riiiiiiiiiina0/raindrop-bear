@@ -20,6 +20,9 @@ async function fetchWithRetry(url, options) {
 }
 
 const RAINDROP_API_BASE = 'https://api.raindrop.io/rest/v1';
+const OAUTH_REFRESH_URL = 'https://ohauth.vercel.app/oauth/raindrop/refresh';
+const TOKEN_EXPIRY_BUFFER_MS = 10 * 60 * 1000; // 10 minutes in milliseconds
+
 let RAINDROP_API_TOKEN = '';
 
 /**
@@ -32,17 +35,125 @@ export function setApiToken(token) {
 }
 
 /**
+ * Checks if OAuth token is expiring soon (within 10 minutes).
+ *
+ * @param {number} expiresAt - Token expiry timestamp in milliseconds.
+ * @returns {boolean} True if token is expiring soon or already expired.
+ */
+function isOAuthTokenExpiringSoon(expiresAt) {
+  if (!expiresAt) return true;
+  return Date.now() + TOKEN_EXPIRY_BUFFER_MS >= expiresAt;
+}
+
+/**
+ * Refreshes the OAuth access token using the refresh token.
+ *
+ * @param {string} refreshToken - The OAuth refresh token.
+ * @returns {Promise<{access_token: string, refresh_token: string, expires_in: number}|null>} New tokens or null on failure.
+ */
+async function refreshOAuthToken(refreshToken) {
+  try {
+    console.log('Refreshing OAuth token...');
+    const response = await fetch(OAUTH_REFRESH_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    if (!response.ok) {
+      console.error('Failed to refresh OAuth token:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.access_token && data.refresh_token && data.expires_in) {
+      // Store new tokens in sync storage (syncs across devices)
+      const expiresAt = Date.now() + data.expires_in * 1000;
+      await chromeP.storageSyncSet({
+        oauthAccessToken: data.access_token,
+        oauthRefreshToken: data.refresh_token,
+        oauthExpiresAt: expiresAt,
+      });
+      console.log('OAuth token refreshed successfully');
+      console.log(`New token expires at: ${new Date(expiresAt).toISOString()}`);
+      return data;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error refreshing OAuth token:', error);
+    return null;
+  }
+}
+
+/**
+ * Gets the active token, preferring test token over OAuth token.
+ * Refreshes OAuth token if it's expiring soon.
+ *
+ * @returns {Promise<string>} The active API token.
+ */
+async function getActiveToken() {
+  try {
+    // Get test token from local storage
+    const localData = await chromeP.storageGet(['raindropApiToken']);
+    
+    // Get OAuth tokens from sync storage
+    const syncData = await chromeP.storageSyncGet([
+      'oauthAccessToken',
+      'oauthRefreshToken',
+      'oauthExpiresAt',
+    ]);
+
+    // Priority 1: Test API token (if present and not empty)
+    if (localData && localData.raindropApiToken && localData.raindropApiToken.trim()) {
+      return localData.raindropApiToken.trim();
+    }
+
+    // Priority 2: OAuth token (with refresh if expiring)
+    if (syncData && syncData.oauthAccessToken && syncData.oauthRefreshToken) {
+      // Check if token is expiring soon
+      if (isOAuthTokenExpiringSoon(syncData.oauthExpiresAt)) {
+        console.log('OAuth token expiring soon, attempting refresh...');
+        const refreshed = await refreshOAuthToken(syncData.oauthRefreshToken);
+        if (refreshed && refreshed.access_token) {
+          return refreshed.access_token;
+        } else {
+          // Refresh failed, try using existing token anyway
+          console.warn('Token refresh failed, using existing token');
+          return syncData.oauthAccessToken;
+        }
+      }
+      return syncData.oauthAccessToken;
+    }
+
+    return '';
+  } catch (error) {
+    console.error('Error getting active token:', error);
+    return '';
+  }
+}
+
+/**
+ * Ensures a valid token is loaded and cached.
+ *
+ * @returns {Promise<string>} The active API token.
+ */
+async function ensureValidToken() {
+  RAINDROP_API_TOKEN = await getActiveToken();
+  return RAINDROP_API_TOKEN;
+}
+
+/**
  * Loads the Raindrop API token from Chrome storage if it is not already set.
+ * Now uses the new token priority system (test token > OAuth token).
  *
  * @returns {Promise<string>} The Raindrop API token.
  */
 export async function loadTokenIfNeeded() {
   if (!RAINDROP_API_TOKEN) {
-    try {
-      const data = await chromeP.storageGet('raindropApiToken');
-      RAINDROP_API_TOKEN =
-        data && data.raindropApiToken ? data.raindropApiToken : '';
-    } catch (_) {}
+    await ensureValidToken();
   }
   return RAINDROP_API_TOKEN;
 }
