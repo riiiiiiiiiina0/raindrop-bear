@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Raindrop Bear",
-  "version": "1.99.0",
+  "version": "1.100.0",
   "description": "One job, done cute: sync your Raindrop.io collections and bookmarks into your browser’s bookmarks — across devices.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA5HwxMOSfTq9kXWgeKS+hdW4NzUemlTZE9kjAA/P6E1ytAAAjIWJiejPGf8RI94gS5Gxf5ROG0b1CnNFOqBSa1j3lKduJLG2b7YuBzeE0r5G6ZMOg4P1p0GiINeTHK+1foDr2jT5oQCftYwuSbPFmVR3JNgnLAy3SvMEKKzVeGolBLO6LPN93hlesNxzuwrt5FI/FiNMh7H9zFQgm6GYr8xkuJ4Z3fRIM5LvhWIZGOmuN+fcY1ZWaw/mGAdKD74BKuK1GTNaZF+KOBNYPSbVnGQhQBqJ+mflpXv6OvIMHvEBpp+F0p8l+FuADBGYxnxS03GsvZzNqZ/pArYOqvWRluwIDAQAB",
   "permissions": [
