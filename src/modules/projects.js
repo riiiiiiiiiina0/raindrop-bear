@@ -143,6 +143,38 @@ export async function listSavedProjects() {
   return result;
 }
 
+// Helper function to apply title with retry logic, similar to the one in background.js
+const applyTitleWithRetry = (tabId, title, maxRetries = 5, delay = 300) => {
+  let attempts = 0;
+
+  const attemptApply = () => {
+    attempts++;
+    chrome.tabs.sendMessage(
+      tabId,
+      { type: 'set_custom_title', title: title },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          const message = String(
+            chrome.runtime.lastError.message || chrome.runtime.lastError,
+          );
+          const noReceiver =
+            message.includes('Receiving end does not exist') ||
+            message.includes('Could not establish connection') ||
+            message.includes('The message port closed') ||
+            message.includes('No matching recipient') ||
+            message.includes('Disconnected port');
+
+          if (noReceiver && attempts < maxRetries) {
+            setTimeout(attemptApply, delay);
+          }
+        }
+      },
+    );
+  };
+
+  attemptApply();
+};
+
 export async function recoverSavedProject(chrome, collectionId, options) {
   const colId = Number(collectionId);
   if (!Number.isFinite(colId)) return;
@@ -274,10 +306,7 @@ export async function recoverSavedProject(chrome, collectionId, options) {
           title: first.meta.customTitle,
           url: first.url,
         };
-        chrome.tabs.sendMessage(activeTab.id, {
-          type: 'set_custom_title',
-          title: first.meta.customTitle,
-        });
+        applyTitleWithRetry(activeTab.id, first.meta.customTitle);
       }
 
       targetWindowId = newWindow.id;
@@ -307,10 +336,7 @@ export async function recoverSavedProject(chrome, collectionId, options) {
             title: first.meta.customTitle,
             url: first.url,
           };
-          chrome.tabs.sendMessage(activeTab.id, {
-            type: 'set_custom_title',
-            title: first.meta.customTitle,
-          });
+          applyTitleWithRetry(activeTab.id, first.meta.customTitle);
         }
       } else {
         // Otherwise, add all tabs to the current window
@@ -337,10 +363,7 @@ export async function recoverSavedProject(chrome, collectionId, options) {
       // Apply custom title if it exists in metadata
       if (newTab && newTab.id && it.meta?.customTitle) {
         tabTitlesData[newTab.id] = { title: it.meta.customTitle, url: it.url };
-        chrome.tabs.sendMessage(newTab.id, {
-          type: 'set_custom_title',
-          title: it.meta.customTitle,
-        });
+        applyTitleWithRetry(newTab.id, it.meta.customTitle);
       }
 
       if (newTab && newTab.id && it.meta?.tabGroup !== null) {
