@@ -1278,10 +1278,14 @@ chrome.runtime.onStartup.addListener(async () => {
   const oldTabTitles = { ...tabTitlesCache };
   if (Object.keys(oldTabTitles).length === 0) return;
 
-  const urlToRecord = {};
+  // Create a map where keys are URLs and values are arrays of title records
+  const urlToRecords = {};
   for (const tabId in oldTabTitles) {
     const record = oldTabTitles[tabId];
-    urlToRecord[record.url] = record; // Last one wins for duplicate URLs
+    if (!urlToRecords[record.url]) {
+      urlToRecords[record.url] = [];
+    }
+    urlToRecords[record.url].push(record);
   }
 
   chrome.tabs.query({}, (tabs) => {
@@ -1289,12 +1293,14 @@ chrome.runtime.onStartup.addListener(async () => {
     const tabsToProcess = [];
 
     for (const tab of tabs) {
-      const record = urlToRecord[tab.url];
-      if (record && typeof tab.id === 'number') {
-        // Match found: create a new record with the new tab ID
-        newTabTitles[tab.id] = { title: record.title, url: tab.url };
-        tabsToProcess.push({ tabId: tab.id, title: record.title });
-        delete urlToRecord[tab.url]; // Prevent re-use for other tabs with same URL
+      if (urlToRecords[tab.url] && urlToRecords[tab.url].length > 0) {
+        // Find a matching record and remove it from the list to avoid re-using it
+        const record = urlToRecords[tab.url].shift();
+        if (record && typeof tab.id === 'number') {
+          // Match found: create a new record with the new tab ID
+          newTabTitles[tab.id] = { title: record.title, url: tab.url };
+          tabsToProcess.push({ tabId: tab.id, title: record.title });
+        }
       }
     }
 
