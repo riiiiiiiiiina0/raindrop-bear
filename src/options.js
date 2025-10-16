@@ -314,20 +314,44 @@ import { loadState, saveState } from './modules/state.js';
     try {
       await chromeP.storageSet({ raindropApiToken: value });
 
-      // If clearing test token, also clear local data
+      // If clearing test token, check if OAuth tokens exist before clearing local data
       if (isClearing) {
         try {
-          await chrome.runtime.sendMessage({ type: 'clearAuth' });
-          /** @type {any} */ (window)
-            .Toastify({
-              text: '🗑️ Test token cleared and local data reset',
-              duration: 3000,
-              position: 'right',
-              style: { background: '#f59e0b' },
-            })
-            .showToast();
+          // Check if user has OAuth tokens
+          const syncData = await chromeP.storageSyncGet([
+            'oauthAccessToken',
+            'oauthRefreshToken',
+          ]);
+          const hasOAuth =
+            syncData && syncData.oauthAccessToken && syncData.oauthRefreshToken;
+
+          if (hasOAuth) {
+            // User still has OAuth tokens, keep bookmarks
+            /** @type {any} */ (window)
+              .Toastify({
+                text: '🔐 Test token cleared (OAuth still active)',
+                duration: 3000,
+                position: 'right',
+                style: { background: '#3b82f6' },
+              })
+              .showToast();
+          } else {
+            // No OAuth tokens, clear everything
+            await chrome.runtime.sendMessage({ type: 'clearAuth' });
+            /** @type {any} */ (window)
+              .Toastify({
+                text: '🗑️ Test token cleared and local data reset',
+                duration: 3000,
+                position: 'right',
+                style: { background: '#f59e0b' },
+              })
+              .showToast();
+          }
         } catch (error) {
-          console.error('Failed to clear local data:', error);
+          console.error(
+            'Failed to check OAuth status or clear local data:',
+            error,
+          );
         }
       } else {
         /** @type {any} */ (window)
