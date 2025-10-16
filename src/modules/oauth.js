@@ -51,10 +51,11 @@ chrome.runtime.onMessageExternal.addListener(
               type: 'basic',
               iconUrl: chrome.runtime.getURL('icons/icon-128x128.png'),
               title: 'Raindrop Bear',
-              message: '🔐 OAuth login successful! You can close this tab.',
+              message: '🔐 OAuth login successful! Starting sync...',
             });
 
             sendResponse({ success: true });
+            // Note: Full re-sync is automatically triggered by storage change listener in background.js
           },
         );
       } else {

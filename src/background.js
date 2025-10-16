@@ -1139,6 +1139,30 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   }
 });
 
+// Listen for OAuth token changes and trigger full sync
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  // OAuth tokens are stored in sync storage
+  if (areaName === 'sync' && changes.oauthAccessToken) {
+    // Check if this is a new OAuth token (not a removal)
+    if (
+      changes.oauthAccessToken.newValue &&
+      !changes.oauthAccessToken.oldValue
+    ) {
+      console.log('New OAuth login detected, triggering full re-sync...');
+      // Use a small delay to ensure tokens are fully saved
+      setTimeout(async () => {
+        try {
+          await deleteLocalData();
+          await performSync();
+          console.log('Post-OAuth sync completed successfully');
+        } catch (error) {
+          console.error('Failed to sync after OAuth login:', error);
+        }
+      }, 500);
+    }
+  }
+});
+
 // Clean up storage and cache when a tab is closed
 chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
   if (tabTitlesCache[tabId]) {
