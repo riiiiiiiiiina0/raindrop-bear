@@ -19,6 +19,24 @@ export const chromeP = {
   },
 
   /**
+   * Promisified wrapper for chrome.storage.sync.get.
+   * @param {string|string[]} keys - A string or array of strings specifying keys to get.
+   * @returns {Promise<Object>} Resolves with the storage items.
+   */
+  storageSyncGet(keys) {
+    return new Promise((resolve) => chrome.storage.sync.get(keys, resolve));
+  },
+
+  /**
+   * Promisified wrapper for chrome.storage.sync.set.
+   * @param {Object} values - An object which gives each key/value pair to update storage with.
+   * @returns {Promise<void>} Resolves when the values are set.
+   */
+  storageSyncSet(values) {
+    return new Promise((resolve) => chrome.storage.sync.set(values, resolve));
+  },
+
+  /**
    * Promisified wrapper for chrome.bookmarks.create.
    * @param {chrome.bookmarks.CreateDetails} details - Details of the bookmark or folder to create.
    * @returns {Promise<chrome.bookmarks.BookmarkTreeNode>} Resolves with the created bookmark node.

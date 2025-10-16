@@ -37,6 +37,15 @@ import { loadState, saveState } from './modules/state.js';
   const parentFolderDescriptionEl = /** @type {HTMLParagraphElement|null} */ (
     document.getElementById('parent-folder-description')
   );
+  const oauthLoginEl = /** @type {HTMLButtonElement|null} */ (
+    document.getElementById('oauth-login')
+  );
+  const oauthLogoutEl = /** @type {HTMLButtonElement|null} */ (
+    document.getElementById('oauth-logout')
+  );
+  const oauthStatusEl = /** @type {HTMLParagraphElement|null} */ (
+    document.getElementById('oauth-status')
+  );
 
   // --- new: helper to populate parent folder select ---
   /**
@@ -89,6 +98,132 @@ import { loadState, saveState } from './modules/state.js';
     );
   // --- end new helper ---
 
+  // --- OAuth authentication helpers ---
+  /**
+   * Updates the OAuth status display based on stored tokens.
+   */
+  async function updateAuthStatus() {
+    try {
+      // Get test token from local storage
+      const localData = await chromeP.storageGet(['raindropApiToken']);
+
+      // Get OAuth tokens from sync storage
+      const syncData = await chromeP.storageSyncGet([
+        'oauthAccessToken',
+        'oauthRefreshToken',
+        'oauthExpiresAt',
+      ]);
+
+      const hasTestToken =
+        localData &&
+        localData.raindropApiToken &&
+        localData.raindropApiToken.trim();
+      const hasOAuth =
+        syncData && syncData.oauthAccessToken && syncData.oauthRefreshToken;
+
+      if (oauthStatusEl && oauthLoginEl && oauthLogoutEl) {
+        if (hasTestToken) {
+          oauthStatusEl.textContent =
+            '✅ Using Test API Token (takes priority over OAuth)';
+          oauthStatusEl.className =
+            'mt-1 text-sm text-green-600 dark:text-green-400';
+          oauthLoginEl.style.display = hasOAuth ? 'none' : 'inline-flex';
+          oauthLogoutEl.style.display = hasOAuth ? 'inline-flex' : 'none';
+        } else if (hasOAuth) {
+          const expiresAt = syncData.oauthExpiresAt;
+          const expiryText = expiresAt
+            ? ` (expires ${new Date(expiresAt).toLocaleString()})`
+            : '';
+          oauthStatusEl.textContent = `✅ Logged in via OAuth${expiryText}`;
+          oauthStatusEl.className =
+            'mt-1 text-sm text-green-600 dark:text-green-400';
+          oauthLoginEl.style.display = 'none';
+          oauthLogoutEl.style.display = 'inline-flex';
+        } else {
+          oauthStatusEl.textContent = 'Not logged in';
+          oauthStatusEl.className =
+            'mt-1 text-sm text-gray-600 dark:text-gray-400';
+          oauthLoginEl.style.display = 'inline-flex';
+          oauthLogoutEl.style.display = 'none';
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update auth status:', error);
+    }
+  }
+
+  /**
+   * Handles OAuth login by opening the OAuth URL in a new tab.
+   */
+  function handleOAuthLogin() {
+    try {
+      const extensionId = chrome.runtime.id;
+      const state = JSON.stringify({ extensionId });
+      const encodedState = encodeURIComponent(state);
+      const oauthUrl = `https://ohauth.vercel.app/oauth/raindrop?state=${encodedState}`;
+
+      chrome.tabs.create({ url: oauthUrl });
+
+      /** @type {any} */ (window)
+        .Toastify({
+          text: '🔐 Opening OAuth login page...',
+          duration: 3000,
+          position: 'right',
+          style: { background: '#3b82f6' },
+        })
+        .showToast();
+    } catch (error) {
+      console.error('Failed to open OAuth login:', error);
+      /** @type {any} */ (window)
+        .Toastify({
+          text: 'Failed to open OAuth login.',
+          duration: 3000,
+          position: 'right',
+          style: { background: '#ef4444' },
+        })
+        .showToast();
+    }
+  }
+
+  /**
+   * Handles OAuth logout by clearing tokens and resetting local data.
+   */
+  async function handleOAuthLogout() {
+    try {
+      // Clear OAuth tokens from sync storage
+      await chromeP.storageSyncSet({
+        oauthAccessToken: null,
+        oauthRefreshToken: null,
+        oauthExpiresAt: null,
+      });
+
+      // Clear local bookmarks and state
+      await chrome.runtime.sendMessage({ type: 'clearAuth' });
+
+      /** @type {any} */ (window)
+        .Toastify({
+          text: '🔓 Logged out successfully',
+          duration: 3000,
+          position: 'right',
+          style: { background: '#22c55e' },
+        })
+        .showToast();
+
+      await updateAuthStatus();
+    } catch (error) {
+      console.error('Failed to logout:', error);
+      /** @type {any} */ (window)
+        .Toastify({
+          text: 'Failed to logout.',
+          duration: 3000,
+          position: 'right',
+          style: { background: '#ef4444' },
+        })
+        .showToast();
+    }
+  }
+  // --- end OAuth helpers ---
+
   if (
     !(formEl instanceof HTMLFormElement) ||
     !(tokenEl instanceof HTMLInputElement) ||
@@ -97,7 +232,10 @@ import { loadState, saveState } from './modules/state.js';
     !(notifyEl instanceof HTMLInputElement) ||
     !(notifyStatusEl instanceof HTMLSpanElement) ||
     !(parentFolderEl instanceof HTMLSelectElement) ||
-    !(parentFolderStatusEl instanceof HTMLSpanElement)
+    !(parentFolderStatusEl instanceof HTMLSpanElement) ||
+    !(oauthLoginEl instanceof HTMLButtonElement) ||
+    !(oauthLogoutEl instanceof HTMLButtonElement) ||
+    !(oauthStatusEl instanceof HTMLParagraphElement)
   ) {
     // DOM not ready; abort quietly
     return;
@@ -120,6 +258,9 @@ import { loadState, saveState } from './modules/state.js';
           ? data.notifyOnSync
           : true; // default ON
       if (notifyEl) notifyEl.checked = !!enabled;
+
+      // Update OAuth status display
+      await updateAuthStatus();
 
       // Populate the select with current folders (and keep previous selection if possible)
       await populateParentFolders(data.parentFolderId);
@@ -158,27 +299,79 @@ import { loadState, saveState } from './modules/state.js';
     } catch (_) {}
   }
 
-  function save() {
+  async function save() {
     if (saveEl) saveEl.disabled = true;
     const value = tokenEl ? tokenEl.value.trim() : '';
+
+    // Check if user is clearing the test token (was non-empty, now empty)
+    const previousData = await chromeP.storageGet('raindropApiToken');
+    const previousToken =
+      previousData && previousData.raindropApiToken
+        ? previousData.raindropApiToken.trim()
+        : '';
+    const isClearing = previousToken && !value;
+
     try {
-      chrome.storage.local.set({ raindropApiToken: value }, () => {
+      await chromeP.storageSet({ raindropApiToken: value });
+
+      // If clearing test token, check if OAuth tokens exist before clearing local data
+      if (isClearing) {
         try {
-          // Show toast instead of inline "Saved" text
-          /** @type {any} */ (window)
-            .Toastify({
-              text: '🔐 API token saved',
-              duration: 3000,
-              position: 'right',
-              style: { background: '#22c55e' },
-            })
-            .showToast();
-        } catch (_) {}
-        // Clear inline status text after success
-        if (statusEl) statusEl.textContent = '';
-        if (saveEl) saveEl.disabled = false;
-      });
+          // Check if user has OAuth tokens
+          const syncData = await chromeP.storageSyncGet([
+            'oauthAccessToken',
+            'oauthRefreshToken',
+          ]);
+          const hasOAuth =
+            syncData && syncData.oauthAccessToken && syncData.oauthRefreshToken;
+
+          if (hasOAuth) {
+            // User still has OAuth tokens, keep bookmarks
+            /** @type {any} */ (window)
+              .Toastify({
+                text: '🔐 Test token cleared (OAuth still active)',
+                duration: 3000,
+                position: 'right',
+                style: { background: '#3b82f6' },
+              })
+              .showToast();
+          } else {
+            // No OAuth tokens, clear everything
+            await chrome.runtime.sendMessage({ type: 'clearAuth' });
+            /** @type {any} */ (window)
+              .Toastify({
+                text: '🗑️ Test token cleared and local data reset',
+                duration: 3000,
+                position: 'right',
+                style: { background: '#f59e0b' },
+              })
+              .showToast();
+          }
+        } catch (error) {
+          console.error(
+            'Failed to check OAuth status or clear local data:',
+            error,
+          );
+        }
+      } else {
+        /** @type {any} */ (window)
+          .Toastify({
+            text: '🔐 API token saved',
+            duration: 3000,
+            position: 'right',
+            style: { background: '#22c55e' },
+          })
+          .showToast();
+      }
+
+      // Update auth status display
+      await updateAuthStatus();
+
+      // Clear inline status text after success
+      if (statusEl) statusEl.textContent = '';
+      if (saveEl) saveEl.disabled = false;
     } catch (e) {
+      console.error('Failed to save token:', e);
       if (saveEl) saveEl.disabled = false;
     }
   }
@@ -189,6 +382,28 @@ import { loadState, saveState } from './modules/state.js';
       e.preventDefault();
       save();
     });
+
+  // OAuth button listeners
+  if (oauthLoginEl) {
+    oauthLoginEl.addEventListener('click', handleOAuthLogin);
+  }
+  if (oauthLogoutEl) {
+    oauthLogoutEl.addEventListener('click', handleOAuthLogout);
+  }
+
+  // Listen for storage changes to update UI when OAuth login completes
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    // OAuth tokens are in sync storage, test token is in local storage
+    if (areaName === 'sync') {
+      if (changes.oauthAccessToken || changes.oauthRefreshToken) {
+        updateAuthStatus();
+      }
+    } else if (areaName === 'local') {
+      if (changes.raindropApiToken) {
+        updateAuthStatus();
+      }
+    }
+  });
   // notifications toggle: save immediately
   if (notifyEl)
     notifyEl.addEventListener('change', () => {

@@ -31,31 +31,65 @@
       <div class="mb-4">
         <h2 class="text-xl text-base/6 font-medium">🔐 Authentication</h2>
         <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Enter your Raindrop API token. It is stored locally and used only to communicate with
-          <span class="font-mono text-gray-800 dark:text-gray-200">api.raindrop.io</span>.
+          Login with your Raindrop account using OAuth (recommended and easier) or use a test API token.
         </p>
       </div>
 
-      <form id="auth-form" class="space-y-4">
-        <label class="block">
-          <span class="text-sm font-medium">API token</span>
-          <input id="token" type="password" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-            class="mt-2 w-full rounded-lg border border-gray-300 bg-white/60 px-3 py-2 text-base shadow-sm outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-950/60 dark:placeholder:text-gray-500" />
-        </label>
-
-        <div class="flex flex-wrap items-center gap-3">
-          <button id="save" type="submit"
-            class="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
-            Save
-          </button>
-          <a href="https://app.raindrop.io/settings/integrations" target="_blank" rel="noopener noreferrer"
-            class="text-sm text-blue-600 hover:underline dark:text-blue-400">
-            Find or generate your API token
-          </a>
-          <a href="https://triiii.notion.site/How-to-Create-Raindrop-API-Token-2627aa7407c180619342c799d5377949" target="_blank" rel="noopener noreferrer" class="text-sm text-blue-600 hover:underline dark:text-blue-400">(how to get your api token 🐻‍❄️⁉️ see here 💡)</a>
-          <span id="status" class="text-sm"></span>
+      <!-- OAuth Login Section -->
+      <div class="space-y-4 pb-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-medium">OAuth Login (Recommended)</h3>
+            <p id="oauth-status" class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              Not logged in
+            </p>
+          </div>
+          <div class="flex gap-2">
+            <button id="oauth-login" type="button"
+              class="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
+              Login with Raindrop
+            </button>
+            <button id="oauth-logout" type="button" style="display: none;"
+              class="inline-flex items-center rounded-lg bg-red-600 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-60">
+              Logout
+            </button>
+          </div>
         </div>
-      </form>
+      </div>
+
+      <hr class="my-6 border-gray-200 dark:border-gray-800" />
+
+      <!-- Test API Token Section -->
+      <div class="space-y-4">
+        <div class="mb-4">
+          <h3 class="text-sm font-medium">Advanced: Test API Token</h3>
+          <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            For developers or advanced users. Enter your Raindrop test API token. It is stored locally and used only to communicate with
+            <span class="font-mono text-gray-800 dark:text-gray-200">api.raindrop.io</span>.
+          </p>
+        </div>
+
+        <form id="auth-form" class="space-y-4">
+          <label class="block">
+            <span class="text-sm font-medium">API token</span>
+            <input id="token" type="password" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              class="mt-2 w-full rounded-lg border border-gray-300 bg-white/60 px-3 py-2 text-base shadow-sm outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-950/60 dark:placeholder:text-gray-500" />
+          </label>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <button id="save" type="submit"
+              class="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-white shadow-sm transition cursor-pointer hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60">
+              Save
+            </button>
+            <a href="https://app.raindrop.io/settings/integrations" target="_blank" rel="noopener noreferrer"
+              class="text-sm text-blue-600 hover:underline dark:text-blue-400">
+              Find or generate your API token
+            </a>
+            <a href="https://triiii.notion.site/How-to-Create-Raindrop-API-Token-2627aa7407c180619342c799d5377949" target="_blank" rel="noopener noreferrer" class="text-sm text-blue-600 hover:underline dark:text-blue-400">(how to get your api token 🐻‍❄️⁉️ see here 💡)</a>
+            <span id="status" class="text-sm"></span>
+          </div>
+        </form>
+      </div>
     </section>
 
     <section

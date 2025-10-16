@@ -15,21 +15,34 @@ import { chromeP } from './chrome.js';
 let RAINDROP_API_TOKEN = '';
 
 async function ensureToken() {
-  if (!RAINDROP_API_TOKEN) {
-    try {
-      const data = await chromeP.storageGet('raindropApiToken');
-      RAINDROP_API_TOKEN =
-        data && data.raindropApiToken ? data.raindropApiToken : '';
-    } catch (_) {}
-  }
-  if (!RAINDROP_API_TOKEN) {
-    notifyMissingOrInvalidToken(
-      'No API token configured. Please add your Raindrop API token.',
-    );
+  // Load token using the new system that supports both test tokens and OAuth
+  const token = await loadTokenIfNeeded();
+
+  if (!token) {
+    // Check if there's any form of authentication configured
+    const localData = await chromeP.storageGet(['raindropApiToken']);
+    const syncData = await chromeP.storageSyncGet([
+      'oauthAccessToken',
+      'oauthRefreshToken',
+    ]);
+
+    const hasTestToken = localData && localData.raindropApiToken;
+    const hasOAuth =
+      syncData && syncData.oauthAccessToken && syncData.oauthRefreshToken;
+
+    if (!hasTestToken && !hasOAuth) {
+      notifyMissingOrInvalidToken(
+        'Not logged in yet. Please perform OAuth login or provide a test API token in Settings.',
+      );
+    } else {
+      notifyMissingOrInvalidToken(
+        'Invalid authentication. Please login again or update your API token in Settings.',
+      );
+    }
     throw new Error('Missing Raindrop API token');
   }
-  setLowToken(RAINDROP_API_TOKEN);
-  await loadTokenIfNeeded();
+
+  RAINDROP_API_TOKEN = token;
 }
 
 export function setFacadeToken(token) {
@@ -44,7 +57,7 @@ export async function apiGET(pathWithQuery) {
   } catch (err) {
     if (err && (err.status === 401 || err.status === 403)) {
       notifyMissingOrInvalidToken(
-        'Invalid API token. Please update your Raindrop API token.',
+        'Invalid authentication. Please login again or update your API token in Settings.',
       );
     }
     throw err;
@@ -58,7 +71,7 @@ export async function apiGETText(pathWithQuery) {
   } catch (err) {
     if (err && (err.status === 401 || err.status === 403)) {
       notifyMissingOrInvalidToken(
-        'Invalid API token. Please update your Raindrop API token.',
+        'Invalid authentication. Please login again or update your API token in Settings.',
       );
     }
     throw err;
@@ -72,7 +85,7 @@ export async function apiPOST(path, body) {
   } catch (err) {
     if (err && (err.status === 401 || err.status === 403)) {
       notifyMissingOrInvalidToken(
-        'Invalid API token. Please update your Raindrop API token.',
+        'Invalid authentication. Please login again or update your API token in Settings.',
       );
     }
     throw err;
@@ -86,7 +99,7 @@ export async function apiPUT(path, body) {
   } catch (err) {
     if (err && (err.status === 401 || err.status === 403)) {
       notifyMissingOrInvalidToken(
-        'Invalid API token. Please update your Raindrop API token.',
+        'Invalid authentication. Please login again or update your API token in Settings.',
       );
     }
     throw err;
@@ -100,7 +113,7 @@ export async function apiDELETE(path) {
   } catch (err) {
     if (err && (err.status === 401 || err.status === 403)) {
       notifyMissingOrInvalidToken(
-        'Invalid API token. Please update your Raindrop API token.',
+        'Invalid authentication. Please login again or update your API token in Settings.',
       );
     }
     throw err;

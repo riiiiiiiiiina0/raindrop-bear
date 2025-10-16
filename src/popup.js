@@ -32,6 +32,15 @@
   const projectsRefreshingStatusEl = /** @type {HTMLSpanElement|null} */ (
     document.getElementById('projects-refreshing-status')
   );
+  const authPlaceholderEl = /** @type {HTMLDivElement|null} */ (
+    document.getElementById('auth-placeholder')
+  );
+  const mainContentEl = /** @type {HTMLDivElement|null} */ (
+    document.getElementById('main-content')
+  );
+  const popupOAuthLoginEl = /** @type {HTMLButtonElement|null} */ (
+    document.getElementById('popup-oauth-login')
+  );
 
   if (
     !(syncBtn instanceof HTMLButtonElement) ||
@@ -41,9 +50,70 @@
     !(saveProjectBtn instanceof HTMLButtonElement) ||
     !(settingsBtn instanceof HTMLButtonElement) ||
     !(raindropBtn instanceof HTMLButtonElement) ||
-    !(saveWindowProjectBtn instanceof HTMLButtonElement)
+    !(saveWindowProjectBtn instanceof HTMLButtonElement) ||
+    !(authPlaceholderEl instanceof HTMLDivElement) ||
+    !(mainContentEl instanceof HTMLDivElement)
   )
     return;
+
+  /**
+   * Check if user is authenticated (has test token or OAuth tokens).
+   * @returns {Promise<boolean>}
+   */
+  async function checkAuthStatus() {
+    return new Promise((resolve) => {
+      // Check test token in local storage
+      chrome.storage.local.get(['raindropApiToken'], (localData) => {
+        if (localData && localData.raindropApiToken && localData.raindropApiToken.trim()) {
+          resolve(true);
+          return;
+        }
+
+        // Check OAuth tokens in sync storage
+        chrome.storage.sync.get(['oauthAccessToken', 'oauthRefreshToken'], (syncData) => {
+          const hasOAuth = syncData && syncData.oauthAccessToken && syncData.oauthRefreshToken;
+          resolve(!!hasOAuth);
+        });
+      });
+    });
+  }
+
+  /**
+   * Update UI based on authentication status.
+   */
+  async function updateUIBasedOnAuth() {
+    const isAuthenticated = await checkAuthStatus();
+    
+    if (isAuthenticated) {
+      // Show main content, hide auth placeholder
+      authPlaceholderEl.classList.add('hidden');
+      mainContentEl.classList.remove('hidden');
+    } else {
+      // Show auth placeholder, hide main content
+      authPlaceholderEl.classList.remove('hidden');
+      mainContentEl.classList.add('hidden');
+    }
+  }
+
+  // OAuth login handler for popup
+  if (popupOAuthLoginEl) {
+    popupOAuthLoginEl.addEventListener('click', () => {
+      try {
+        const extensionId = chrome.runtime.id;
+        const state = JSON.stringify({ extensionId });
+        const encodedState = encodeURIComponent(state);
+        const oauthUrl = `https://ohauth.vercel.app/oauth/raindrop?state=${encodedState}`;
+        
+        chrome.tabs.create({ url: oauthUrl });
+        window.close();
+      } catch (error) {
+        console.error('Failed to open OAuth login:', error);
+      }
+    });
+  }
+
+  // Check auth status on popup load
+  updateUIBasedOnAuth();
 
   /**
    * @param {string} text
